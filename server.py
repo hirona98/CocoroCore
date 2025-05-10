@@ -1,33 +1,52 @@
 import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
-from aiavatar.adapter.websocket.server import AIAvatarWebSocketServer
+
 from aiavatar.adapter.http.server import AIAvatarHttpServer
+from aiavatar.sts.llm.chatgpt import ChatGPTService
+#from aiavatar.sts.llm.gemini import GeminiService
+
 
 # 環境変数を読み込む
 load_dotenv()
 
-# APIキーを環境変数から取得
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+LLM_OPENAI_API_KEY = os.getenv("LLM_OPENAI_API_KEY")
+LLM_GEMINI_API_KEY = os.getenv("LLM_GEMINI_API_KEY")
+LLM_MODEL = os.getenv("LLM_MODEL")
 
-# APIキーが設定されていない場合はエラーメッセージを表示
-if not OPENAI_API_KEY:
-    raise ValueError("OPENAI_API_KEY が環境変数に設定されていません。.env ファイルまたは環境変数を確認してください。")
+STT_OPENAI_API_KEY = os.getenv("STT_OPENAI_API_KEY")
+
+
+llm = ChatGPTService(
+    openai_api_key=LLM_OPENAI_API_KEY,
+    model=LLM_MODEL,
+    temperature=0.0,
+    system_prompt="{system_prompt}",
+)
+
+# llm = GeminiService(
+#     gemini_api_key=LLM_GEMINI_API_KEY,
+#     model=LLM_MODEL,
+#     temperature=0.0,
+#     system_prompt="{system_prompt}",
+# )
 
 # AIAvatarインスタンスを作成
-# ここで必要な設定（APIキー、LLMモデル、ボリューム閾値など）を行います
-# aiavatar_app = AIAvatarWebSocketServer(
-#     openai_api_key=OPENAI_API_KEY, # OpenAI APIキー
-#     volume_db_threshold=-30, # 音声環境に合わせて調整
-#     debug=True
-# )
 aiavatar_app = AIAvatarHttpServer(
-    openai_api_key=OPENAI_API_KEY,
+    llm=llm,
+    openai_api_key=STT_OPENAI_API_KEY, # API Key for STT
+    system_prompt="{system_prompt}",
     debug=True
 )
 
 # FastAPIアプリを設定し、AIAvatarのルーターを含める
 app = FastAPI()
-# router = aiavatar_app.get_websocket_router()
 router = aiavatar_app.get_api_router()
 app.include_router(router)
+
+aiavatarkit_port = 55601
+
+# サーバー起動
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=aiavatarkit_port)
