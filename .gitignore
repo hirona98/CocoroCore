@@ -1,3 +1,8 @@
+# CocoroAI
+
+context.db
+performance.db
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
