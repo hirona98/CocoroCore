@@ -2,6 +2,7 @@ import os
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from aiavatar.adapter.websocket.server import AIAvatarWebSocketServer
+from aiavatar.adapter.http.server import AIAvatarHttpServer
 
 # 環境変数を読み込む
 load_dotenv()
@@ -15,13 +16,18 @@ if not OPENAI_API_KEY:
 
 # AIAvatarインスタンスを作成
 # ここで必要な設定（APIキー、LLMモデル、ボリューム閾値など）を行います
-aiavatar_app = AIAvatarWebSocketServer(
-    openai_api_key=OPENAI_API_KEY, # OpenAI APIキー
-    volume_db_threshold=-30, # 音声環境に合わせて調整
+# aiavatar_app = AIAvatarWebSocketServer(
+#     openai_api_key=OPENAI_API_KEY, # OpenAI APIキー
+#     volume_db_threshold=-30, # 音声環境に合わせて調整
+#     debug=True
+# )
+aiavatar_app = AIAvatarHttpServer(
+    openai_api_key=OPENAI_API_KEY,
     debug=True
 )
 
-# FastAPIアプリを設定し、AIAvatarのWebSocketルーターを含める
+# FastAPIアプリを設定し、AIAvatarのルーターを含める
 app = FastAPI()
-router = aiavatar_app.get_websocket_router()
+# router = aiavatar_app.get_websocket_router()
+router = aiavatar_app.get_api_router()
 app.include_router(router)
