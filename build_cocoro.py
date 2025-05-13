@@ -14,9 +14,34 @@ from pathlib import Path
 DEFAULT_CONFIG = {
     "app_name": "CocoroCore",
     "icon_path": None,  # アイコンが必要な場合は "resources/icon.ico" などを指定
-    "hidden_imports": [],  # 必要に応じて依存モジュールを追加
+    "hidden_imports": [
+        "tiktoken",
+        "tiktoken.registry",
+        "tiktoken._registry",
+        "tiktoken.model",
+        "tiktoken.core",
+        "tiktoken.load",
+        "tiktoken._educational",
+        "litellm",
+        "litellm.utils",
+        "litellm.llms",
+        "litellm.cost_calculator",
+        "litellm.litellm_core_utils",
+        "litellm.litellm_core_utils.llm_cost_calc",
+        "litellm.litellm_core_utils.tokenizers",
+    ],  # 必要に応じて依存モジュールを追加
     "onefile": True,  # True: 単一実行ファイル、False: フォルダ形式
     "console": False,  # True: コンソール表示、False: 非表示
+    "datas": [
+        # tiketokenのエンコーディングモジュール全体を含める
+        ("venv/Lib/site-packages/tiktoken", "tiktoken"),
+        ("venv/Lib/site-packages/tiktoken_ext", "tiktoken_ext"),
+        # litellmのトークナイザーデータファイルを含める
+        (
+            "venv/Lib/site-packages/litellm/litellm_core_utils/tokenizers",
+            "litellm/litellm_core_utils/tokenizers",
+        ),
+    ],
 }
 
 
@@ -35,6 +60,19 @@ def build_cocoro(config=None):
     except subprocess.CalledProcessError:
         print("📦 PyInstallerをインストールしています...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
+
+    # tiketokenのインストール確認と更新
+    try:
+        subprocess.check_call([sys.executable, "-c", "import tiktoken"])
+        print("✅ tiketokenは既にインストールされています")
+        # バージョン確認と更新（必要な場合）
+        print("📦 tiketokenを最新版に更新しています...")
+        subprocess.check_call(
+            [sys.executable, "-m", "pip", "install", "--upgrade", "tiktoken"]
+        )
+    except subprocess.CalledProcessError:
+        print("📦 tiketokenをインストールしています...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "tiktoken"])
 
     # ビルドディレクトリをクリーンアップ
     for dir_name in ["dist", "build"]:
@@ -62,11 +100,16 @@ def build_cocoro(config=None):
 
     # アイコン設定
     if build_config["icon_path"] and os.path.exists(build_config["icon_path"]):
-        pyinstaller_args.append(f"--icon={build_config['icon_path']}")
-
-    # 依存モジュール設定
+        pyinstaller_args.append(
+            f"--icon={build_config['icon_path']}"
+        )  # 依存モジュール設定
     for imp in build_config["hidden_imports"]:
         pyinstaller_args.append(f"--hidden-import={imp}")
+
+    # データファイル設定（datas）
+    if "datas" in build_config and build_config["datas"]:
+        for src, dst in build_config["datas"]:
+            pyinstaller_args.append(f"--add-data={src};{dst}")
 
     # メインスクリプト追加
     pyinstaller_args.append("cocoro_core.py")
