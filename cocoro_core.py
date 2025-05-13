@@ -3,6 +3,7 @@ from fastapi import FastAPI
 
 from aiavatar.adapter.http.server import AIAvatarHttpServer
 from aiavatar.sts.llm.litellm import LiteLLMService
+from aiavatar.sts.pipeline import STSPipeline
 
 # from aiavatar.sts.llm.gemini import GeminiService
 from config_loader import load_config
@@ -39,9 +40,15 @@ llm = LiteLLMService(
     system_prompt="{system_prompt}",
 )
 
+# デフォルトだとAIの発話が保存されるため明示的にFalse指定する
+sts = STSPipeline(
+    llm=llm,
+    voice_recorder_enabled=False,
+)
+
 # AIAvatarインスタンスを作成
 aiavatar_app = AIAvatarHttpServer(
-    llm=llm,
+    sts=sts,
     debug=False,
 )
 
