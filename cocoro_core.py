@@ -60,6 +60,7 @@ app.include_router(router)
 # サーバー起動
 if __name__ == "__main__":
     import uvicorn
+    import time
 
     # 設定情報のログ出力
     print("CocoroCore を起動します")
@@ -68,11 +69,38 @@ if __name__ == "__main__":
     )
     print(f"使用ポート: {port}")
 
+    # EXE実行時のログ設定を調整(デフォルトだとコンソールOFFの時に落ちる)
+    log_config = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "formatters": {
+            "simple": {
+                "format": "%(levelname)s: %(message)s",
+            },
+        },
+        "handlers": {
+            "console": {
+                "class": "logging.StreamHandler",
+                "level": "INFO",
+                "formatter": "simple",
+                "stream": "ext://sys.stdout",
+            },
+        },
+        "loggers": {
+            "uvicorn": {"handlers": ["console"], "level": "INFO"},
+        },
+    }
+
     try:
-        uvicorn.run(app, host="127.0.0.1", port=port)
+        uvicorn.run(app, host="127.0.0.1", port=port, log_config=log_config)
     except Exception as e:
         print(f"サーバー起動エラー: {e}")
         import traceback
 
         traceback.print_exc()
-        input("Enterキーを押すと終了します...")
+        try:
+            input("Enterキーを押すと終了します...")
+        except RuntimeError:
+            # EXE実行時にsys.stdinが利用できない場合
+            print("5秒後に自動終了します...")
+            time.sleep(5)
