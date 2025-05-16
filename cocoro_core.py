@@ -1,12 +1,27 @@
 import argparse
+import logging
 from fastapi import FastAPI
 
 from aiavatar.adapter.http.server import AIAvatarHttpServer
 from aiavatar.sts.llm.litellm import LiteLLMService
 from aiavatar.sts.pipeline import STSPipeline
+from aiavatar.sts.tts.voicevox import VoicevoxSpeechSynthesizer
 
 # from aiavatar.sts.llm.gemini import GeminiService
 from config_loader import load_config
+
+
+# TTS未登録時でも落ちなくするためのVoicevoxSpeechSynthesizer
+class ErrorTolerantVoicevoxSpeechSynthesizer(VoicevoxSpeechSynthesizer):
+    async def synthesize(self, text, style_info=None, language=None):
+        if not text:
+            return None
+        try:
+            return await super().synthesize(text, style_info, language)
+        except Exception as e:
+            logging.warning(f"TTS合成に失敗しましたが、処理を続行します: {e}")
+            return None
+
 
 # コマンドライン引数を解析
 parser = argparse.ArgumentParser(description="CocoroCore AI Assistant Server")
@@ -40,9 +55,15 @@ llm = LiteLLMService(
     system_prompt="{system_prompt}",
 )
 
+# カスタムTTS
+custom_tts = ErrorTolerantVoicevoxSpeechSynthesizer(
+    base_url="http://127.0.0.1:50021", speaker=46, debug=False
+)
+
 # デフォルトだとAIの発話が保存されるため明示的にFalse指定する
 sts = STSPipeline(
     llm=llm,
+    tts=custom_tts,
     voice_recorder_enabled=False,
 )
 
