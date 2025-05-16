@@ -5,6 +5,16 @@ CocoroCore は デスクトップマスコット CocoroAI のバックエンド�
 CocoroAI
 https://alice-encoder.booth.pm/items/6821221
 
+----
+
+AIの進化に合わせてそのうち作り直すと思うので、かな～り雑に作ってます
+
+Python良く知らないので、おかしな部分もあると思います
+
+プルリクしたい場合はお気軽にどうぞ！
+
+----
+
 ## フレームワーク
 aiavatarkit
 https://github.com/uezo/aiavatarkit
