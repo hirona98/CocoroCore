@@ -1,5 +1,4 @@
 import argparse
-import logging
 from fastapi import FastAPI
 
 from aiavatar.adapter.http.server import AIAvatarHttpServer
