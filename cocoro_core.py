@@ -40,6 +40,7 @@ llm = LiteLLMService(
     model=llm_model,
     temperature=1.0,
     system_prompt="{system_prompt}",
+    context_manager=None,  # context.dbを生成しないようにする
 )
 
 custom_tts = SpeechSynthesizerDummy()
@@ -49,6 +50,7 @@ sts = STSPipeline(
     llm=llm,
     tts=custom_tts,
     voice_recorder_enabled=False,
+    performance_recorder=None,  # performance.dbを生成しないようにする
 )
 
 # AIAvatarインスタンスを作成
