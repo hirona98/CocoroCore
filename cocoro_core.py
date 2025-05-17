@@ -8,6 +8,7 @@ from aiavatar.sts.tts import SpeechSynthesizerDummy
 
 # from aiavatar.sts.llm.gemini import GeminiService
 from config_loader import load_config
+from dummy_db import DummyPerformanceRecorder, DummyContextManager
 
 
 # コマンドライン引数を解析
@@ -40,7 +41,7 @@ llm = LiteLLMService(
     model=llm_model,
     temperature=1.0,
     system_prompt="{system_prompt}",
-    context_manager=None,  # context.dbを生成しないようにする
+    context_manager=DummyContextManager(),  # context.dbを生成しないようにする
 )
 
 custom_tts = SpeechSynthesizerDummy()
@@ -50,7 +51,7 @@ sts = STSPipeline(
     llm=llm,
     tts=custom_tts,
     voice_recorder_enabled=False,
-    performance_recorder=None,  # performance.dbを生成しないようにする
+    performance_recorder=DummyPerformanceRecorder(),  # performance.dbを生成しないようにする
 )
 
 # AIAvatarインスタンスを作成
