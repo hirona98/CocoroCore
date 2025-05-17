@@ -8,7 +8,7 @@ from aiavatar.sts.tts import SpeechSynthesizerDummy
 
 # from aiavatar.sts.llm.gemini import GeminiService
 from config_loader import load_config
-from dummy_db import DummyPerformanceRecorder, DummyContextManager
+from dummy_db import DummyPerformanceRecorder, DummyContextManager, DummyVoiceRecorder
 
 
 # コマンドライン引数を解析
@@ -52,6 +52,7 @@ sts = STSPipeline(
     tts=custom_tts,
     voice_recorder_enabled=False,
     performance_recorder=DummyPerformanceRecorder(),  # performance.dbを生成しないようにする
+    voice_recorder=DummyVoiceRecorder(),  # recorded_voicesディレクトリを生成しないようにする
 )
 
 # AIAvatarインスタンスを作成
