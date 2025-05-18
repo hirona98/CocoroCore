@@ -27,10 +27,25 @@ pip install aiavatar
 ```
 
 ## ビルド方法
-`build_config.py` で設定をしたあとに `build_windows.bat` を実行する
+
+同梱の `build_simple.bat` を実行します。
+これにより次の処理が行われます:
+ - 仮想環境の有効化
+ - PyInstallerの確認とインストール
+ - PyInstallerによるバイナリのビルド
+
+ビルドが成功すると以下のファイルが生成されます:
+ - `dist/CocoroCore.exe`: 実行可能ファイル
 
 ## 実行方法
 -c オプションで設定ファイルの場所を指定する
 ```
 .\dist\CocoroCore.exe -c ..\CocoroAI\UserData
 ```
+
+## トラブルシューティング
+
+ビルドに失敗した場合:
+
+1. 仮想環境が正しく作成されているか確認
+2. コンソールオプションを有効にしてエラーメッセージを確認 (`console: True`)

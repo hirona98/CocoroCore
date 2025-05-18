@@ -8,7 +8,7 @@
             "name": "Python: CocoroCore",
             "type": "python",
             "request": "launch",
-            "program": "${workspaceFolder}/cocoro_core.py",
+            "program": "${workspaceFolder}/src/main.py",
             "console": "integratedTerminal",
             "justMyCode": true,
             "python": "${workspaceFolder}/venv/Scripts/python.exe",

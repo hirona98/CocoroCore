@@ -91,10 +91,8 @@ def build_cocoro(config=None):
     # データファイル設定（datas）
     if "datas" in build_config and build_config["datas"]:
         for src, dst in build_config["datas"]:
-            pyinstaller_args.append(f"--add-data={src};{dst}")
-
-    # メインスクリプト追加
-    pyinstaller_args.append("cocoro_core.py")
+            pyinstaller_args.append(f"--add-data={src};{dst}")    # メインスクリプト追加
+    pyinstaller_args.append("src/main.py")
 
     # コマンド実行
     print("\n📋 実行するコマンド:", " ".join(pyinstaller_args))
