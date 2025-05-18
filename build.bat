@@ -3,7 +3,7 @@ echo CocoroCore ビルドツール
 
 REM 仮想環境を有効化
 echo 仮想環境を有効化しています...
-call .\venv\Scripts\activate
+call .\.venv\Scripts\activate
 
 REM Pythonバージョン確認
 python -c "import sys; print(f'Python {sys.version}')"

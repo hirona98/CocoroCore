@@ -33,11 +33,11 @@ BUILD_CONFIG = {
     "console": False,  # True: コンソール表示、False: 非表示
     "datas": [
         # tiketokenのエンコーディングモジュール全体を含める
-        ("venv/Lib/site-packages/tiktoken", "tiktoken"),
-        ("venv/Lib/site-packages/tiktoken_ext", "tiktoken_ext"),
+        (".venv/Lib/site-packages/tiktoken", "tiktoken"),
+        (".venv/Lib/site-packages/tiktoken_ext", "tiktoken_ext"),
         # litellmのトークナイザーデータファイルを含める
         (
-            "venv/Lib/site-packages/litellm/litellm_core_utils/tokenizers",
+            ".venv/Lib/site-packages/litellm/litellm_core_utils/tokenizers",
             "litellm/litellm_core_utils/tokenizers",
         ),
     ],
