@@ -1,0 +1,19 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "仮想環境の有効化とCocoroCore実行",
+            "type": "shell",
+            "command": "${workspaceFolder}/venv/Scripts/Activate.ps1 ; python ${workspaceFolder}/cocoro_core.py",
+            "problemMatcher": [],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "new"
+            }
+        }
+    ]
+}

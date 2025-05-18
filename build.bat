@@ -1,5 +1,4 @@
 @echo off
-REM filepath: d:\MyProject\AliceEncoder\DesktopAssistant\CocoroAI\CocoroCore\build_simple.bat
 echo CocoroCore ビルドツール
 
 REM 仮想環境を有効化
