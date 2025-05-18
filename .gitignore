@@ -2,6 +2,7 @@
 recorded_voices/
 context.db
 performance.db
+*.code-workspace
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
