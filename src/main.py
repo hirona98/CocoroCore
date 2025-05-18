@@ -1,6 +1,7 @@
 import argparse
 import time
 import traceback
+
 import uvicorn
 
 from cocoro_core import create_app, get_log_config
@@ -12,7 +13,7 @@ def main():
     # コマンドライン引数を解析
     parser = argparse.ArgumentParser(description="CocoroCore AI Assistant Server")
     parser.add_argument(
-        "folder_path", nargs="?", help="設定ファイルのフォルダパス（省略可）"
+        "folder_path", nargs="?", help="設定ファイルのフォルダパス（省略可）" 
     )
     parser.add_argument("--config-dir", "-c", help="設定ファイルのディレクトリパス")
     args = parser.parse_args()

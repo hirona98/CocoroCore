@@ -1,7 +1,7 @@
+import argparse
 import json
 import os
 import sys
-import argparse
 
 
 def parse_args():

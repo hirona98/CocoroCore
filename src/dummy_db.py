@@ -1,8 +1,9 @@
-from aiavatar.sts.performance_recorder import PerformanceRecorder, PerformanceRecord
-from aiavatar.sts.llm.context_manager import ContextManager
-from aiavatar.sts.voice_recorder import VoiceRecorder
 from datetime import datetime, timezone
-from typing import List, Dict, Optional
+from typing import Dict, List, Optional
+
+from aiavatar.sts.llm.context_manager import ContextManager
+from aiavatar.sts.performance_recorder import PerformanceRecord, PerformanceRecorder
+from aiavatar.sts.voice_recorder import VoiceRecorder
 
 
 class DummyPerformanceRecorder(PerformanceRecorder):

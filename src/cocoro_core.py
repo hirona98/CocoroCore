@@ -1,12 +1,11 @@
-from fastapi import FastAPI
-
 from aiavatar.adapter.http.server import AIAvatarHttpServer
 from aiavatar.sts.llm.litellm import LiteLLMService
 from aiavatar.sts.pipeline import STSPipeline
 from aiavatar.sts.tts import SpeechSynthesizerDummy
+from fastapi import FastAPI
 
 from config_loader import load_config
-from dummy_db import DummyPerformanceRecorder, DummyContextManager, DummyVoiceRecorder
+from dummy_db import DummyContextManager, DummyPerformanceRecorder, DummyVoiceRecorder
 
 
 def create_app(config_dir=None):
