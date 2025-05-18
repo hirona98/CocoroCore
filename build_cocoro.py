@@ -1,7 +1,6 @@
 #!/usr/bin/env python
-# filepath: d:\MyProject\AliceEncoder\DesktopAssistant\CocoroAI\CocoroCore\build_cocoro.py
 """
-CocoroCore ビルドスクリプト（簡略化版）
+CocoroCore ビルドスクリプト
 """
 
 import os
@@ -11,7 +10,7 @@ import sys
 from pathlib import Path
 
 # ビルド設定
-DEFAULT_CONFIG = {
+BUILD_CONFIG = {
     "app_name": "CocoroCore",
     "icon_path": None,  # アイコンが必要な場合は "resources/icon.ico" などを指定
     "hidden_imports": [
@@ -29,7 +28,7 @@ DEFAULT_CONFIG = {
         "litellm.litellm_core_utils",
         "litellm.litellm_core_utils.llm_cost_calc",
         "litellm.litellm_core_utils.tokenizers",
-    ],  # 必要に応じて依存モジュールを追加
+    ],
     "onefile": True,  # True: 単一実行ファイル、False: フォルダ形式
     "console": False,  # True: コンソール表示、False: 非表示
     "datas": [
@@ -48,7 +47,7 @@ DEFAULT_CONFIG = {
 def build_cocoro(config=None):
     """CocoroCoreのWindowsバイナリをビルドする簡略化関数"""
     # 設定を使用または初期化
-    build_config = config or DEFAULT_CONFIG
+    build_config = config or BUILD_CONFIG
     app_name = build_config["app_name"]
 
     print(f"\n=== {app_name} ビルドを開始します ===")
@@ -60,19 +59,6 @@ def build_cocoro(config=None):
     except subprocess.CalledProcessError:
         print("📦 PyInstallerをインストールしています...")
         subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
-
-    # tiketokenのインストール確認と更新
-    try:
-        subprocess.check_call([sys.executable, "-c", "import tiktoken"])
-        print("✅ tiketokenは既にインストールされています")
-        # バージョン確認と更新（必要な場合）
-        print("📦 tiketokenを最新版に更新しています...")
-        subprocess.check_call(
-            [sys.executable, "-m", "pip", "install", "--upgrade", "tiktoken"]
-        )
-    except subprocess.CalledProcessError:
-        print("📦 tiketokenをインストールしています...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "tiktoken"])
 
     # ビルドディレクトリをクリーンアップ
     for dir_name in ["dist", "build"]:
@@ -98,11 +84,7 @@ def build_cocoro(config=None):
     else:
         pyinstaller_args.append("--noconsole")
 
-    # アイコン設定
-    if build_config["icon_path"] and os.path.exists(build_config["icon_path"]):
-        pyinstaller_args.append(
-            f"--icon={build_config['icon_path']}"
-        )  # 依存モジュール設定
+    # 依存モジュール設定
     for imp in build_config["hidden_imports"]:
         pyinstaller_args.append(f"--hidden-import={imp}")
 
@@ -132,10 +114,8 @@ def main():
     """メイン関数"""
     # カスタム設定ファイルがあれば読み込む
     try:
-        from build_config import BUILD_CONFIG
-
         print("ℹ️ カスタムビルド設定を読み込みました")
-        build_cocoro(BUILD_CONFIG)
+        build_cocoro()
     except ImportError:
         print("ℹ️ デフォルトビルド設定を使用します")
         build_cocoro()

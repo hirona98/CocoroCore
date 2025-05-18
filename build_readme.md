@@ -1,18 +1,12 @@
-# CocoroCore 簡略化ビルドガイド
+# CocoroCore ビルドガイド
 
 このドキュメントでは、CocoroCore アプリケーションをWindowsバイナリにビルドする方法を説明します。
 
 ## 必要条件
 
-- Python 3.8以上
+- Python 3.10以上
 - 仮想環境（venv）が作成されていること
 
-## 簡略化されたビルドプロセス
-
-CocoroCore のビルドプロセスが簡略化されました。新しいビルドシステムでは、以下の2つのファイルのみを使用します：
-
-1. `build_cocoro.py` - メインのビルドスクリプト
-2. `build_simple.bat` - ビルド実行用バッチファイル
 
 ## ビルド手順
 
@@ -31,25 +25,6 @@ CocoroCore のビルドプロセスが簡略化されました。新しいビル
 
    - `dist/CocoroCore.exe`: 実行可能ファイル
 
-## カスタマイズ
-
-ビルド設定をカスタマイズするには、次の2つの方法があります:
-
-1. `build_config.py` ファイルを編集する（外部設定）
-2. `build_cocoro.py` ファイル内の `DEFAULT_CONFIG` を直接編集する
-
-主なカスタマイズ項目：
-- `app_name`: アプリケーション名
-- `icon_path`: アイコンファイルのパス
-- `hidden_imports`: 追加で含めるモジュール
-- `onefile`: 単一ファイルにするか（True/False）
-- `console`: コンソールウィンドウを表示するか（True/False）
-
-## 注意事項
-
-- 以前の `build_windows.bat` と `build.py` は削除されました。
-- ビルドには新しい `build_simple.bat` または `build_cocoro.py` を使用してください。
-- 新しいビルドスクリプトでは、エラーメッセージの表示が改善され、より分かりやすくなっています。
 
 ## トラブルシューティング
 
