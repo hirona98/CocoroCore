@@ -6,7 +6,6 @@ from aiavatar.sts.llm.litellm import LiteLLMService
 from aiavatar.sts.pipeline import STSPipeline
 from aiavatar.sts.tts import SpeechSynthesizerDummy
 
-# from aiavatar.sts.llm.gemini import GeminiService
 from config_loader import load_config
 from dummy_db import DummyPerformanceRecorder, DummyContextManager, DummyVoiceRecorder
 
