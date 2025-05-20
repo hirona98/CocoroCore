@@ -9,12 +9,9 @@ from cocoro_core import create_app, get_log_config
 
 def main():
     """CocoroCore AI アシスタントサーバーのメインエントリポイント"""
-    
     # コマンドライン引数を解析
     parser = argparse.ArgumentParser(description="CocoroCore AI Assistant Server")
-    parser.add_argument(
-        "folder_path", nargs="?", help="設定ファイルのフォルダパス（省略可）" 
-    )
+    parser.add_argument("folder_path", nargs="?", help="設定ファイルのフォルダパス（省略可）")
     parser.add_argument("--config-dir", "-c", help="設定ファイルのディレクトリパス")
     args = parser.parse_args()
 
@@ -27,9 +24,12 @@ def main():
 
     # 設定情報のログ出力
     print("CocoroCore を起動します")
-    print(
-        f"設定ディレクトリ: {args.config_dir if hasattr(args, 'config_dir') and args.config_dir else '(デフォルト)'}"
+    config_dir = (
+        "(デフォルト)"
+        if not hasattr(args, "config_dir") or not args.config_dir
+        else args.config_dir
     )
+    print(f"設定ディレクトリ: {config_dir}")
     print(f"使用ポート: {port}")
 
     # ログ設定を取得

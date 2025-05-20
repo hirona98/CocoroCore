@@ -1,12 +1,9 @@
 # Python開発用ツール
-black==24.3.0
-isort==5.13.2
-flake8==7.0.0
-mypy==1.9.0
-bandit==1.7.7
+ruff==0.3.0  # リンターとフォーマッターが統合されたツール
+mypy==1.9.0  # 型チェッカー
 pytest==8.0.0
 pytest-cov==4.1.0
-pre-commit==3.6.0
+pre-commit==4.2.0  # 最新バージョンに更新
 
 # 型関連
 types-requests

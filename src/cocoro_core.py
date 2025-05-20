@@ -4,27 +4,30 @@ from aiavatar.sts.pipeline import STSPipeline
 from aiavatar.sts.tts import SpeechSynthesizerDummy
 from fastapi import FastAPI
 
+# local imports
 from config_loader import load_config
 from dummy_db import DummyContextManager, DummyPerformanceRecorder, DummyVoiceRecorder
 
 
 def create_app(config_dir=None):
-    """
-    CocoroCore アプリケーションを作成する関数
-    
+    """CocoroCore アプリケーションを作成する関数
+
     Args:
+    ----
         config_dir (str, optional): 設定ディレクトリのパス. デフォルトはNone.
-        
+
     Returns:
+    -------
         tuple: (FastAPI アプリケーション, ポート番号)
+
     """
     # 設定ファイルを読み込む
     config = load_config(config_dir)
 
     # setting.jsonから値を取得
-    llm_api_key = config.get("characterList", [])[
-        config.get("currentCharacterIndex", 0)
-    ].get("apiKey")
+    llm_api_key = config.get("characterList", [])[config.get("currentCharacterIndex", 0)].get(
+        "apiKey"
+    )
     llm_model = config.get("characterList", [])[config.get("currentCharacterIndex", 0)].get(
         "llmModel"
     )
@@ -60,7 +63,7 @@ def create_app(config_dir=None):
     app = FastAPI()
     router = aiavatar_app.get_api_router()
     app.include_router(router)
-    
+
     return app, port
 
 

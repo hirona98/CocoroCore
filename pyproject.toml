@@ -2,29 +2,35 @@
 requires = ["setuptools>=42", "wheel"]
 build-backend = "setuptools.build_meta"
 
-[tool.black]
+[tool.ruff]
+# 対象Pythonバージョン
+target-version = "py310"
+# 行の長さ
 line-length = 100
-target-version = ['py310']
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | venv
-  | _build
-  | buck-out
-  | build
-  | dist
-)/
-'''
 
-[tool.isort]
-profile = "black"
-line_length = 100
+# リンターの設定
+[tool.ruff.lint]
+# 有効にするルール
+# E, F: flake8互換ルール
+# I: isort互換
+# D: docstring
+# S: bandit互換セキュリティチェック
+select = ["E", "F", "I", "S"]
+ignore = [
+  "D",    # ドキュメント関連
+  "I001", # isortの設定
+  "S311", # suspicious-random-choice
+  "S603",
+]
 
+# 除外ディレクトリ
+exclude = ["venv", ".venv", "build", "dist", "__pycache__"]
+
+# isortの設定
+[tool.ruff.lint.isort]
+known-first-party = ["cocoro_core"]
+
+# 型チェック用のmypy設定
 [tool.mypy]
 python_version = "3.10"
 warn_return_any = true
@@ -36,9 +42,3 @@ disallow_incomplete_defs = true
 module = "tests.*"
 disallow_untyped_defs = false
 disallow_incomplete_defs = false
-
-[tool.bandit]
-exclude_dirs = ["tests", "venv", "__pycache__", "build", "dist"]
-skips = [
-    "B311",
-] # Standard pseudo-random generators are not suitable for security/cryptographic purposes

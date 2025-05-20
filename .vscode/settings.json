@@ -1,27 +1,8 @@
 {
-    "python.linting.enabled": true,
-    "python.linting.flake8Enabled": true,
-    "python.linting.mypyEnabled": true,
-    "python.linting.banditEnabled": true,
-    "python.linting.pylintEnabled": false,
-    "python.formatting.provider": "black",
-    "python.formatting.blackArgs": [
-        "--line-length",
-        "100"
-    ],
     "editor.formatOnSave": true,
     "editor.codeActionsOnSave": {
         "source.organizeImports": "explicit"
     },
-    "python.linting.flake8Args": [
-        "--max-line-length=100",
-        "--ignore=E203,W503"
-    ],
-    "python.linting.mypyArgs": [
-        "--ignore-missing-imports",
-        "--disallow-untyped-defs",
-        "--disallow-incomplete-defs"
-    ],
     "isort.args": [
         "--profile",
         "black",
@@ -29,10 +10,6 @@
         "100"
     ],
     "[python]": {
-        "editor.defaultFormatter": "ms-python.python",
-        "editor.formatOnSave": true,
-        "editor.codeActionsOnSave": {
-            "source.organizeImports": "explicit"
-        }
+        "editor.defaultFormatter": "charliermarsh.ruff",
     }
 }

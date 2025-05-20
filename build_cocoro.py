@@ -1,9 +1,6 @@
 #!/usr/bin/env python
-"""
-CocoroCore ビルドスクリプト
-"""
+"""CocoroCore ビルドスクリプト"""
 
-import os
 import shutil
 import subprocess
 import sys
@@ -54,11 +51,25 @@ def build_cocoro(config=None):
 
     # PyInstallerのインストール確認
     try:
-        subprocess.check_call([sys.executable, "-c", "import PyInstaller"])
+        import importlib.util
+
+        if importlib.util.find_spec("PyInstaller") is None:
+            raise ImportError("PyInstaller is not installed")
         print("✅ PyInstallerは既にインストールされています")
-    except subprocess.CalledProcessError:
+    except ImportError:
         print("📦 PyInstallerをインストールしています...")
-        subprocess.check_call([sys.executable, "-m", "pip", "install", "pyinstaller"])
+        # 固定文字列のみを使用してサブプロセスを実行
+        try:
+            # 安全な固定コマンドのみを使用
+            subprocess.run(
+                [sys.executable, "-m", "pip", "install", "pyinstaller"],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+        except subprocess.SubprocessError as e:
+            print(f"PyInstallerのインストールに失敗しました: {e}")
+            sys.exit(1)
 
     # ビルドディレクトリをクリーンアップ
     for dir_name in ["dist", "build"]:
@@ -91,7 +102,7 @@ def build_cocoro(config=None):
     # データファイル設定（datas）
     if "datas" in build_config and build_config["datas"]:
         for src, dst in build_config["datas"]:
-            pyinstaller_args.append(f"--add-data={src};{dst}")    # メインスクリプト追加
+            pyinstaller_args.append(f"--add-data={src};{dst}")  # メインスクリプト追加
     pyinstaller_args.append("src/main.py")
 
     # コマンド実行
