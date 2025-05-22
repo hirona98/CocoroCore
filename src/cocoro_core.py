@@ -6,7 +6,7 @@ from fastapi import FastAPI
 
 # local imports
 from config_loader import load_config
-from dummy_db import DummyContextManager, DummyPerformanceRecorder, DummyVoiceRecorder
+from dummy_db import DummyPerformanceRecorder, DummyVoiceRecorder
 
 
 def create_app(config_dir=None):
@@ -39,7 +39,6 @@ def create_app(config_dir=None):
         model=llm_model,
         temperature=1.0,
         system_prompt="{system_prompt}",
-        context_manager=DummyContextManager(),  # context.dbを生成しないようにする
     )
 
     custom_tts = SpeechSynthesizerDummy()

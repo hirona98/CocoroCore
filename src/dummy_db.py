@@ -1,7 +1,3 @@
-from datetime import datetime, timezone
-from typing import Dict, List, Optional
-
-from aiavatar.sts.llm.context_manager import ContextManager
 from aiavatar.sts.performance_recorder import PerformanceRecord, PerformanceRecorder
 from aiavatar.sts.voice_recorder import VoiceRecorder
 
@@ -17,24 +13,6 @@ class DummyPerformanceRecorder(PerformanceRecorder):
 
     def close(self):
         pass
-
-
-class DummyContextManager(ContextManager):
-    """A context manager implementation that doesn't create a database file."""
-
-    def __init__(self):
-        pass
-
-    async def get_histories(self, context_id: str, limit: int = 100) -> List[Dict]:
-        return []
-
-    async def add_histories(
-        self, context_id: str, data_list: List[Dict], context_schema: Optional[str] = None
-    ):
-        pass
-
-    async def get_last_created_at(self, context_id: str) -> datetime:
-        return datetime.min.replace(tzinfo=timezone.utc)
 
 
 class DummyVoiceRecorder(VoiceRecorder):
