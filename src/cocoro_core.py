@@ -156,7 +156,7 @@ def create_app(config_dir=None):
             # セッションごとに保存
             await memory_client.save_history(
                 user_id=request.user_id or "default_user",
-                session_id=request.session_id or "default_session",
+                session_id=request.session_id,
                 channel="cocoro_ai",
             )
 
