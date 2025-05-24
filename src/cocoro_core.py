@@ -119,8 +119,14 @@ def create_app(config_dir=None):
     port = config.get("cocoroCorePort", 55601)
 
     # ChatMemory設定を取得
-    memory_url = config.get("chatMemoryUrl", "http://localhost:8000")
-    memory_client = ChatMemoryClient(memory_url)
+    memory_enabled = current_char.get("isEnableMemory", False)
+    memory_port = config.get("cocoroMemoryPort", 55602)
+    memory_url = f"http://localhost:{memory_port}"
+    memory_client = None
+
+    if memory_enabled:
+        logger.info(f"ChatMemoryを有効化します: {memory_url}")
+        memory_client = ChatMemoryClient(memory_url)
 
     # https://docs.litellm.ai/docs/providers
     llm = LiteLLMService(
