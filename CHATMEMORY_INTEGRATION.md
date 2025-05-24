@@ -26,6 +26,8 @@ python -m chatmemory --host 0.0.0.0 --port 8000
 {
   "chatMemoryEnabled": true,
   "chatMemoryUrl": "http://localhost:8000",
+  "cocoroMemoryPort": 55602,
+  "cocoroMemoryDBPort": 5432,
   // ... 既存の設定 ...
 }
 ```
@@ -34,6 +36,8 @@ python -m chatmemory --host 0.0.0.0 --port 8000
 
 - `chatMemoryEnabled` (boolean): ChatMemory機能を有効にするかどうか（デフォルト: false）
 - `chatMemoryUrl` (string): ChatMemoryサーバーのURL（デフォルト: "http://localhost:8000"）
+- `cocoroMemoryPort` (number): ChatMemoryサーバーのポート番号（デフォルト: 55602）
+- `cocoroMemoryDBPort` (number): PostgreSQLデータベースのポート番号（デフォルト: 5432）
 
 ## 使用方法
 

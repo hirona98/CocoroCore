@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(ruff format:*)",
+      "Bash(ruff check:*)"
     ],
     "deny": []
   }

@@ -210,6 +210,7 @@ def create_app(config_dir=None):
     # ChatMemory設定を取得
     memory_enabled = current_char.get("isEnableMemory", False)
     memory_port = config.get("cocoroMemoryPort", 55602)
+    memory_db_port = config.get("cocoroMemoryDBPort", 5432)  # PostgreSQLのデフォルトポート
     memory_url = f"http://localhost:{memory_port}"
     memory_client = None
 
@@ -220,6 +221,7 @@ def create_app(config_dir=None):
 
     if memory_enabled:
         print(f"[INFO] ChatMemoryを有効化します: {memory_url}", flush=True)
+        print(f"[INFO] PostgreSQLポート: {memory_db_port}", flush=True)
         memory_client = ChatMemoryClient(memory_url)
 
     # https://docs.litellm.ai/docs/providers
