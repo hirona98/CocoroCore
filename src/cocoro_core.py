@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from typing import Optional
+from datetime import datetime, timedelta
+from typing import Dict, Optional
 
 import httpx
 from aiavatar.adapter.http.server import AIAvatarHttpServer
@@ -65,7 +66,7 @@ class ChatMemoryClient:
                 },
             )
             response.raise_for_status()
-            logger.info(f"履歴を保存しました: {len(messages)}件のメッセージ")
+            print(f"[INFO] 履歴を保存しました: {len(messages)}件のメッセージ", flush=True)
         except Exception as e:
             logger.error(f"履歴の保存に失敗しました: {e}")
             # 失敗したメッセージをキューに戻す
@@ -91,6 +92,21 @@ class ChatMemoryClient:
         except Exception as e:
             logger.error(f"記憶の検索に失敗しました: {e}")
             return None
+
+    async def create_summary(self, user_id: str, session_id: str = None):
+        """指定したセッションの要約を生成"""
+        try:
+            params = {"user_id": user_id}
+            if session_id:
+                params["session_id"] = session_id
+
+            response = await self.client.post(f"{self.base_url}/summary/create", params=params)
+            response.raise_for_status()
+            print(
+                f"[INFO] 要約を生成しました: user_id={user_id}, session_id={session_id}", flush=True
+            )
+        except Exception as e:
+            logger.error(f"要約の生成に失敗しました: {e}")
 
     async def close(self):
         """クライアントを閉じる"""
@@ -124,8 +140,13 @@ def create_app(config_dir=None):
     memory_url = f"http://localhost:{memory_port}"
     memory_client = None
 
+    # セッションタイムアウト管理用の変数
+    session_last_activity: Dict[str, datetime] = {}
+    session_timeout_seconds = 300  # 5分
+    timeout_check_task = None
+
     if memory_enabled:
-        logger.info(f"ChatMemoryを有効化します: {memory_url}")
+        print(f"[INFO] ChatMemoryを有効化します: {memory_url}", flush=True)
         memory_client = ChatMemoryClient(memory_url)
 
     # https://docs.litellm.ai/docs/providers
@@ -149,9 +170,41 @@ def create_app(config_dir=None):
 
     # ChatMemoryとの統合
     if memory_client:
+        # タイムアウトしたセッションをチェックして要約を生成する非同期タスク
+        async def check_session_timeouts():
+            while True:
+                try:
+                    await asyncio.sleep(30)  # 30秒ごとにチェック
+                    current_time = datetime.now()
+                    timeout_threshold = current_time - timedelta(seconds=session_timeout_seconds)
+
+                    # タイムアウトしたセッションを検出
+                    timed_out_sessions = []
+                    for session_key, last_activity in list(session_last_activity.items()):
+                        if last_activity < timeout_threshold:
+                            timed_out_sessions.append(session_key)
+
+                    # タイムアウトしたセッションの要約を生成
+                    for session_key in timed_out_sessions:
+                        try:
+                            user_id, session_id = session_key.split(":", 1)
+                            # バックグラウンドでも確実にログが表示されるようにprint文
+                            print(f"[INFO] セッションタイムアウト検出: {session_key}", flush=True)
+                            await memory_client.create_summary(user_id, session_id)
+                            del session_last_activity[session_key]
+                        except Exception as e:
+                            logger.error(f"タイムアウト処理エラー: {e}")
+
+                except Exception as e:
+                    logger.error(f"セッションタイムアウトチェックエラー: {e}")
+
         # 会話終了時に履歴を保存
         @sts.on_finish
         async def save_to_memory(request, response):
+            # セッションアクティビティを更新
+            session_key = f"{request.user_id or 'default_user'}:{request.session_id}"
+            session_last_activity[session_key] = datetime.now()
+
             await memory_client.enqueue_messages(request, response)
             # セッションごとに保存
             await memory_client.save_history(
@@ -214,9 +267,31 @@ def create_app(config_dir=None):
 
     # アプリケーション終了時のクリーンアップ
     if memory_client:
+        # アプリケーション起動時にタスクを開始
+        @app.on_event("startup")
+        async def startup():
+            nonlocal timeout_check_task
+            timeout_check_task = asyncio.create_task(check_session_timeouts())
 
         @app.on_event("shutdown")
         async def cleanup():
+            # タイムアウトチェックタスクをキャンセル
+            if timeout_check_task:
+                timeout_check_task.cancel()
+                try:
+                    await timeout_check_task
+                except asyncio.CancelledError:
+                    pass
+
+            # すべてのアクティブなセッションの要約を生成
+            for session_key in list(session_last_activity.keys()):
+                try:
+                    user_id, session_id = session_key.split(":", 1)
+                    print(f"[INFO] シャットダウン時の要約生成: {session_key}", flush=True)
+                    await memory_client.create_summary(user_id, session_id)
+                except Exception as e:
+                    logger.error(f"シャットダウン時の要約生成エラー: {e}")
+
             await memory_client.close()
 
     return app, port
