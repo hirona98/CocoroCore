@@ -1,5 +1,4 @@
 import asyncio
-import logging
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 
@@ -13,8 +12,6 @@ from fastapi import FastAPI
 # local imports
 from config_loader import load_config
 from dummy_db import DummyPerformanceRecorder, DummyVoiceRecorder
-
-logger = logging.getLogger(__name__)
 
 
 # ChatMemoryクライアントクラス
@@ -68,7 +65,7 @@ class ChatMemoryClient:
             response.raise_for_status()
             print(f"[INFO] 履歴を保存しました: {len(messages)}件のメッセージ", flush=True)
         except Exception as e:
-            logger.error(f"履歴の保存に失敗しました: {e}")
+            print(f"[ERROR] 履歴の保存に失敗しました: {e}", flush=True)
             # 失敗したメッセージをキューに戻す
             async with self._queue_lock:
                 self._message_queue = messages + self._message_queue
@@ -90,7 +87,7 @@ class ChatMemoryClient:
             result = response.json()
             return result["result"]["answer"]
         except Exception as e:
-            logger.error(f"記憶の検索に失敗しました: {e}")
+            print(f"[ERROR] 記憶の検索に失敗しました: {e}", flush=True)
             return None
 
     async def create_summary(self, user_id: str, session_id: str = None):
@@ -106,7 +103,22 @@ class ChatMemoryClient:
                 f"[INFO] 要約を生成しました: user_id={user_id}, session_id={session_id}", flush=True
             )
         except Exception as e:
-            logger.error(f"要約の生成に失敗しました: {e}")
+            print(f"[ERROR] 要約の生成に失敗しました: {e}", flush=True)
+
+    async def add_knowledge(self, user_id: str, knowledge: str):
+        """ユーザーの知識（固有名詞、記念日など）を追加"""
+        try:
+            response = await self.client.post(
+                f"{self.base_url}/knowledge",
+                json={
+                    "user_id": user_id,
+                    "knowledge": knowledge,
+                },
+            )
+            response.raise_for_status()
+            print(f"[INFO] ナレッジを追加しました: {knowledge}", flush=True)
+        except Exception as e:
+            print(f"[ERROR] ナレッジの追加に失敗しました: {e}", flush=True)
 
     async def close(self):
         """クライアントを閉じる"""
@@ -193,10 +205,10 @@ def create_app(config_dir=None):
                             await memory_client.create_summary(user_id, session_id)
                             del session_last_activity[session_key]
                         except Exception as e:
-                            logger.error(f"タイムアウト処理エラー: {e}")
+                            print(f"[ERROR] タイムアウト処理エラー: {e}", flush=True)
 
                 except Exception as e:
-                    logger.error(f"セッションタイムアウトチェックエラー: {e}")
+                    print(f"[ERROR] セッションタイムアウトチェックエラー: {e}", flush=True)
 
         # 会話終了時に履歴を保存
         @sts.on_finish
@@ -232,6 +244,25 @@ def create_app(config_dir=None):
             },
         }
 
+        # ナレッジ追加ツールを追加
+        add_knowledge_spec = {
+            "type": "function",
+            "function": {
+                "name": "add_knowledge",
+                "description": "ユーザーに関する重要な情報（固有名詞、記念日、好み、家族の名前など）を長期記憶として保存します。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "knowledge": {
+                            "type": "string",
+                            "description": "保存する知識（例：ユーザーの誕生日は1月1日、ペットの名前はポチ、好きな食べ物はラーメンなど）",
+                        }
+                    },
+                    "required": ["knowledge"],
+                },
+            },
+        }
+
         @sts.llm.tool(memory_search_spec)
         async def search_memory(query: str, metadata: dict = None):
             """過去の記憶を検索"""
@@ -242,6 +273,13 @@ def create_app(config_dir=None):
             else:
                 return "関連する記憶が見つかりませんでした。"
 
+        @sts.llm.tool(add_knowledge_spec)
+        async def add_knowledge(knowledge: str, metadata: dict = None):
+            """重要な情報をナレッジとして保存"""
+            user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
+            await memory_client.add_knowledge(user_id, knowledge)
+            return f"ナレッジを保存しました: {knowledge}"
+
         # システムプロンプトに記憶機能の説明を追加
         original_prompt = llm.system_prompt
         llm.system_prompt = (
@@ -251,7 +289,15 @@ def create_app(config_dir=None):
 記憶機能について：
 あなたは長期記憶機能を持っています。過去の会話内容を記憶し、必要に応じて思い出すことができます。
 ユーザーの好み、過去の話題、個人的な情報などを聞かれた場合は、search_memoryツールを使って記憶を検索してください。
-新しい重要な情報（ユーザーの好み、個人情報など）は自動的に記憶されます。"""
+
+重要な情報の保存について：
+ユーザーから以下のような重要な情報を聞いた場合は、add_knowledgeツールを使って保存してください：
+- 固有名詞（人やペットの名前、会社名、学校名、地域名など）
+- 記念日（誕生日、結婚記念日、その他の大切な日）
+- 個人的な好み（好きな食べ物、趣味、嫌いなものなど）
+- その他、将来的に参照したい重要な情報
+
+例：ユーザーが「私の誕生日は5月1日です」と言った場合、add_knowledgeツールで「ユーザーの誕生日：5月1日」として保存してください。"""
         )
 
     # AIAvatarインスタンスを作成
@@ -290,7 +336,7 @@ def create_app(config_dir=None):
                     print(f"[INFO] シャットダウン時の要約生成: {session_key}", flush=True)
                     await memory_client.create_summary(user_id, session_id)
                 except Exception as e:
-                    logger.error(f"シャットダウン時の要約生成エラー: {e}")
+                    print(f"[ERROR] シャットダウン時の要約生成エラー: {e}", flush=True)
 
             await memory_client.close()
 
