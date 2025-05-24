@@ -11,5 +11,6 @@
     ],
     "[python]": {
         "editor.defaultFormatter": "charliermarsh.ruff",
-    }
+    },
+    "commentTranslate.hover.enabled": false
 }
