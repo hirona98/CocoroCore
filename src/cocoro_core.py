@@ -120,6 +120,67 @@ class ChatMemoryClient:
         except Exception as e:
             print(f"[ERROR] ナレッジの追加に失敗しました: {e}", flush=True)
 
+    async def delete_history(self, user_id: str, session_id: str = None):
+        """指定したユーザーの会話履歴を削除"""
+        try:
+            params = {"user_id": user_id}
+            if session_id:
+                params["session_id"] = session_id
+            
+            response = await self.client.delete(
+                f"{self.base_url}/history",
+                params=params,
+            )
+            response.raise_for_status()
+            print(f"[INFO] 履歴を削除しました: user_id={user_id}, session_id={session_id}", flush=True)
+        except Exception as e:
+            print(f"[ERROR] 履歴の削除に失敗しました: {e}", flush=True)
+
+    async def delete_summary(self, user_id: str, session_id: str = None):
+        """指定したユーザーの要約を削除"""
+        try:
+            params = {"user_id": user_id}
+            if session_id:
+                params["session_id"] = session_id
+            
+            response = await self.client.delete(
+                f"{self.base_url}/summary",
+                params=params,
+            )
+            response.raise_for_status()
+            print(f"[INFO] 要約を削除しました: user_id={user_id}, session_id={session_id}", flush=True)
+        except Exception as e:
+            print(f"[ERROR] 要約の削除に失敗しました: {e}", flush=True)
+
+    async def get_knowledge(self, user_id: str):
+        """ユーザーの知識を取得"""
+        try:
+            response = await self.client.get(
+                f"{self.base_url}/knowledge",
+                params={"user_id": user_id},
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            print(f"[ERROR] ナレッジの取得に失敗しました: {e}", flush=True)
+            return []
+
+    async def delete_knowledge(self, user_id: str, knowledge_id: int = None):
+        """指定したナレッジを削除"""
+        try:
+            params = {"user_id": user_id}
+            if knowledge_id:
+                params["knowledge_id"] = knowledge_id
+            
+            response = await self.client.delete(
+                f"{self.base_url}/knowledge",
+                params=params,
+            )
+            response.raise_for_status()
+            print(f"[INFO] ナレッジを削除しました: knowledge_id={knowledge_id}", flush=True)
+        except Exception as e:
+            print(f"[ERROR] ナレッジの削除に失敗しました: {e}", flush=True)
+
     async def close(self):
         """クライアントを閉じる"""
         await self.client.aclose()
@@ -263,6 +324,38 @@ def create_app(config_dir=None):
             },
         }
 
+        # 記憶削除ツールを追加
+        forget_memory_spec = {
+            "type": "function",
+            "function": {
+                "name": "forget_memory",
+                "description": "ユーザーから忘れてほしいと指示された特定の事柄に関する記憶（ナレッジ）を削除します。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "topic": {
+                            "type": "string",
+                            "description": "削除したい事柄の内容（例：誕生日、ペットの名前、特定の出来事など）",
+                        }
+                    },
+                    "required": ["topic"],
+                },
+            },
+        }
+
+        # セッション削除確認ツールを追加
+        delete_session_spec = {
+            "type": "function",
+            "function": {
+                "name": "delete_current_session",
+                "description": "ユーザーが確認した後、現在のセッションの履歴と要約を削除します。",
+                "parameters": {
+                    "type": "object",
+                    "properties": {},
+                },
+            },
+        }
+
         @sts.llm.tool(memory_search_spec)
         async def search_memory(query: str, metadata: dict = None):
             """過去の記憶を検索"""
@@ -279,6 +372,54 @@ def create_app(config_dir=None):
             user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
             await memory_client.add_knowledge(user_id, knowledge)
             return f"ナレッジを保存しました: {knowledge}"
+
+        @sts.llm.tool(forget_memory_spec)
+        async def forget_memory(topic: str, metadata: dict = None):
+            """特定の事柄に関する記憶を削除"""
+            user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
+            session_id = metadata.get("session_id") if metadata else None
+            
+            # ナレッジから該当する項目を検索して削除
+            knowledge_list = await memory_client.get_knowledge(user_id)
+            deleted_count = 0
+            
+            for knowledge_item in knowledge_list:
+                # knowledge_itemが辞書型の場合の処理
+                if isinstance(knowledge_item, dict):
+                    knowledge_text = knowledge_item.get("knowledge", "")
+                    knowledge_id = knowledge_item.get("id")
+                    
+                    # トピックに関連する内容かチェック（大文字小文字を無視）
+                    if topic.lower() in knowledge_text.lower():
+                        await memory_client.delete_knowledge(user_id, knowledge_id)
+                        deleted_count += 1
+                        print(f"[INFO] 削除したナレッジ: {knowledge_text}", flush=True)
+            
+            result_message = ""
+            if deleted_count > 0:
+                result_message = f"「{topic}」に関する{deleted_count}件のナレッジを削除しました。\n"
+            else:
+                result_message = f"「{topic}」に関するナレッジは見つかりませんでした。\n"
+            
+            # ヒストリーとサマリーの削除について確認
+            if session_id:
+                result_message += f"\n現在の会話履歴にも「{topic}」に関する内容が含まれている可能性があります。"
+                result_message += "\n直近の会話履歴と要約も削除しますか？（「はい」と答えると現在のセッションの履歴が削除されます）"
+            
+            return result_message
+
+        @sts.llm.tool(delete_session_spec)
+        async def delete_current_session(metadata: dict = None):
+            """現在のセッションの履歴と要約を削除"""
+            user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
+            session_id = metadata.get("session_id") if metadata else None
+            
+            if session_id:
+                await memory_client.delete_history(user_id, session_id)
+                await memory_client.delete_summary(user_id, session_id)
+                return "現在のセッションの会話履歴と要約を削除しました。"
+            else:
+                return "セッションIDが不明なため、削除できませんでした。"
 
         # システムプロンプトに記憶機能の説明を追加
         original_prompt = llm.system_prompt
@@ -297,7 +438,21 @@ def create_app(config_dir=None):
 - 個人的な好み（好きな食べ物、趣味、嫌いなものなど）
 - その他、将来的に参照したい重要な情報
 
-例：ユーザーが「私の誕生日は5月1日です」と言った場合、add_knowledgeツールで「ユーザーの誕生日：5月1日」として保存してください。"""
+例：ユーザーが「私の誕生日は5月1日です」と言った場合、add_knowledgeツールで「ユーザーの誕生日：5月1日」として保存してください。
+
+記憶の削除について：
+ユーザーから「忘れて」「記憶を消して」などの指示があった場合は、forget_memoryツールを使って記憶を削除してください。
+- 「誕生日を忘れて」「ペットの名前を忘れて」など、特定の事柄を指定された場合 → その内容をtopicに指定
+- 削除する際は、まず指定された事柄に関連するナレッジを検索して削除します
+- その後、現在のセッションの履歴も削除するか確認を取ります
+
+例：
+- 「私の誕生日を忘れて」→ forget_memoryツールで topic="誕生日" を指定
+- 「ポチのことは忘れて」→ forget_memoryツールで topic="ポチ" を指定
+
+セッション削除の確認：
+forget_memoryツールの実行後、現在のセッションの履歴削除についてユーザーに確認を取ります。
+ユーザーが「はい」「削除して」「お願い」などと答えた場合は、delete_current_sessionツールを使って削除します。"""
         )
 
     # AIAvatarインスタンスを作成
