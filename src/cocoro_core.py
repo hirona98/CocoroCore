@@ -126,13 +126,15 @@ class ChatMemoryClient:
             params = {"user_id": user_id}
             if session_id:
                 params["session_id"] = session_id
-            
+
             response = await self.client.delete(
                 f"{self.base_url}/history",
                 params=params,
             )
             response.raise_for_status()
-            print(f"[INFO] 履歴を削除しました: user_id={user_id}, session_id={session_id}", flush=True)
+            print(
+                f"[INFO] 履歴を削除しました: user_id={user_id}, session_id={session_id}", flush=True
+            )
         except Exception as e:
             print(f"[ERROR] 履歴の削除に失敗しました: {e}", flush=True)
 
@@ -142,13 +144,15 @@ class ChatMemoryClient:
             params = {"user_id": user_id}
             if session_id:
                 params["session_id"] = session_id
-            
+
             response = await self.client.delete(
                 f"{self.base_url}/summary",
                 params=params,
             )
             response.raise_for_status()
-            print(f"[INFO] 要約を削除しました: user_id={user_id}, session_id={session_id}", flush=True)
+            print(
+                f"[INFO] 要約を削除しました: user_id={user_id}, session_id={session_id}", flush=True
+            )
         except Exception as e:
             print(f"[ERROR] 要約の削除に失敗しました: {e}", flush=True)
 
@@ -171,7 +175,7 @@ class ChatMemoryClient:
             params = {"user_id": user_id}
             if knowledge_id:
                 params["knowledge_id"] = knowledge_id
-            
+
             response = await self.client.delete(
                 f"{self.base_url}/knowledge",
                 params=params,
@@ -380,34 +384,36 @@ def create_app(config_dir=None):
             """特定の事柄に関する記憶を削除"""
             user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
             session_id = metadata.get("session_id") if metadata else None
-            
+
             # ナレッジから該当する項目を検索して削除
             knowledge_list = await memory_client.get_knowledge(user_id)
             deleted_count = 0
-            
+
             for knowledge_item in knowledge_list:
                 # knowledge_itemが辞書型の場合の処理
                 if isinstance(knowledge_item, dict):
                     knowledge_text = knowledge_item.get("knowledge", "")
                     knowledge_id = knowledge_item.get("id")
-                    
+
                     # トピックに関連する内容かチェック（大文字小文字を無視）
                     if topic.lower() in knowledge_text.lower():
                         await memory_client.delete_knowledge(user_id, knowledge_id)
                         deleted_count += 1
                         print(f"[INFO] 削除したナレッジ: {knowledge_text}", flush=True)
-            
+
             result_message = ""
             if deleted_count > 0:
                 result_message = f"「{topic}」に関する{deleted_count}件のナレッジを削除しました。\n"
             else:
                 result_message = f"「{topic}」に関するナレッジは見つかりませんでした。\n"
-            
+
             # ヒストリーとサマリーの削除について確認
             if session_id:
-                result_message += f"\n現在の会話履歴にも「{topic}」に関する内容が含まれている可能性があります。"
+                result_message += (
+                    f"\n現在の会話履歴にも「{topic}」に関する内容が含まれている可能性があります。"
+                )
                 result_message += "\n直近の会話履歴と要約も削除しますか？（「はい」と答えると現在のセッションの履歴が削除されます）"
-            
+
             return result_message
 
         @sts.llm.tool(delete_session_spec)
@@ -415,7 +421,7 @@ def create_app(config_dir=None):
             """現在のセッションの履歴と要約を削除"""
             user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
             session_id = metadata.get("session_id") if metadata else None
-            
+
             if session_id:
                 await memory_client.delete_history(user_id, session_id)
                 await memory_client.delete_summary(user_id, session_id)
