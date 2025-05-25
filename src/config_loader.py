@@ -63,6 +63,11 @@ def load_config(custom_config_dir=None):
         with open(config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
         print(f"設定ファイルを読み込みました: {config_path}")
+
+        # デバッグモードの設定がない場合はデフォルトでFalse
+        if "debug" not in config:
+            config["debug"] = False
+
         return config
     except Exception as e:
         print(f"設定ファイルの読み込みに失敗しました: {e}")

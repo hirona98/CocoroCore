@@ -14,6 +14,34 @@ from config_loader import load_config
 from dummy_db import DummyPerformanceRecorder, DummyVoiceRecorder
 
 
+# グローバルデバッグフラグ
+_DEBUG_MODE = False
+
+
+def set_debug_mode(debug: bool):
+    """デバッグモードを設定"""
+    global _DEBUG_MODE
+    _DEBUG_MODE = debug
+
+
+def log_debug(message: str, flush: bool = True):
+    """デバッグログを出力"""
+    if _DEBUG_MODE:
+        print(f"[DEBUG] {message}", flush=flush)
+
+
+def log_info(message: str, flush: bool = True):
+    """情報ログを出力"""
+    if _DEBUG_MODE:
+        print(f"[INFO] {message}", flush=flush)
+
+
+def log_error(message: str, flush: bool = True):
+    """エラーログを出力"""
+    if _DEBUG_MODE:
+        print(f"[ERROR] {message}", flush=flush)
+
+
 # ChatMemoryクライアントクラス
 class ChatMemoryClient:
     """ChatMemoryサービスとの通信を管理するクライアント"""
@@ -63,9 +91,9 @@ class ChatMemoryClient:
                 },
             )
             response.raise_for_status()
-            print(f"[INFO] 履歴を保存しました: {len(messages)}件のメッセージ", flush=True)
+            log_info(f"履歴を保存しました: {len(messages)}件のメッセージ")
         except Exception as e:
-            print(f"[ERROR] 履歴の保存に失敗しました: {e}", flush=True)
+            log_error(f"履歴の保存に失敗しました: {e}")
             # 失敗したメッセージをキューに戻す
             async with self._queue_lock:
                 self._message_queue = messages + self._message_queue
@@ -87,7 +115,7 @@ class ChatMemoryClient:
             result = response.json()
             return result["result"]["answer"]
         except Exception as e:
-            print(f"[ERROR] 記憶の検索に失敗しました: {e}", flush=True)
+            log_error(f"記憶の検索に失敗しました: {e}")
             return None
 
     async def create_summary(self, user_id: str, session_id: str = None):
@@ -99,11 +127,9 @@ class ChatMemoryClient:
 
             response = await self.client.post(f"{self.base_url}/summary/create", params=params)
             response.raise_for_status()
-            print(
-                f"[INFO] 要約を生成しました: user_id={user_id}, session_id={session_id}", flush=True
-            )
+            log_info(f"要約を生成しました: user_id={user_id}, session_id={session_id}")
         except Exception as e:
-            print(f"[ERROR] 要約の生成に失敗しました: {e}", flush=True)
+            log_error(f"要約の生成に失敗しました: {e}")
 
     async def add_knowledge(self, user_id: str, knowledge: str):
         """ユーザーの知識（固有名詞、記念日など）を追加"""
@@ -116,9 +142,9 @@ class ChatMemoryClient:
                 },
             )
             response.raise_for_status()
-            print(f"[INFO] ナレッジを追加しました: {knowledge}", flush=True)
+            log_info(f"ナレッジを追加しました: {knowledge}")
         except Exception as e:
-            print(f"[ERROR] ナレッジの追加に失敗しました: {e}", flush=True)
+            log_error(f"ナレッジの追加に失敗しました: {e}")
 
     async def delete_history(self, user_id: str, session_id: str = None):
         """指定したユーザーの会話履歴を削除"""
@@ -132,11 +158,9 @@ class ChatMemoryClient:
                 params=params,
             )
             response.raise_for_status()
-            print(
-                f"[INFO] 履歴を削除しました: user_id={user_id}, session_id={session_id}", flush=True
-            )
+            log_info(f"履歴を削除しました: user_id={user_id}, session_id={session_id}")
         except Exception as e:
-            print(f"[ERROR] 履歴の削除に失敗しました: {e}", flush=True)
+            log_error(f"履歴の削除に失敗しました: {e}")
 
     async def delete_summary(self, user_id: str, session_id: str = None):
         """指定したユーザーの要約を削除"""
@@ -150,11 +174,9 @@ class ChatMemoryClient:
                 params=params,
             )
             response.raise_for_status()
-            print(
-                f"[INFO] 要約を削除しました: user_id={user_id}, session_id={session_id}", flush=True
-            )
+            log_info(f"要約を削除しました: user_id={user_id}, session_id={session_id}")
         except Exception as e:
-            print(f"[ERROR] 要約の削除に失敗しました: {e}", flush=True)
+            log_error(f"要約の削除に失敗しました: {e}")
 
     async def get_knowledge(self, user_id: str):
         """ユーザーの知識を取得"""
@@ -166,7 +188,7 @@ class ChatMemoryClient:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            print(f"[ERROR] ナレッジの取得に失敗しました: {e}", flush=True)
+            log_error(f"ナレッジの取得に失敗しました: {e}")
             return []
 
     async def delete_knowledge(self, user_id: str, knowledge_id: int = None):
@@ -181,9 +203,9 @@ class ChatMemoryClient:
                 params=params,
             )
             response.raise_for_status()
-            print(f"[INFO] ナレッジを削除しました: knowledge_id={knowledge_id}", flush=True)
+            log_info(f"ナレッジを削除しました: knowledge_id={knowledge_id}")
         except Exception as e:
-            print(f"[ERROR] ナレッジの削除に失敗しました: {e}", flush=True)
+            log_error(f"ナレッジの削除に失敗しました: {e}")
 
     async def close(self):
         """クライアントを閉じる"""
@@ -204,6 +226,9 @@ def create_app(config_dir=None):
     """
     # 設定ファイルを読み込む
     config = load_config(config_dir)
+    
+    # デバッグモードを設定
+    set_debug_mode(config.get("debug", False))
 
     # setting.jsonから値を取得
     current_char = config.get("characterList", [])[config.get("currentCharacterIndex", 0)]
@@ -224,8 +249,8 @@ def create_app(config_dir=None):
     timeout_check_task = None
 
     if memory_enabled:
-        print(f"[INFO] ChatMemoryを有効化します: {memory_url}", flush=True)
-        print(f"[INFO] PostgreSQLポート: {memory_db_port}", flush=True)
+        log_info(f"ChatMemoryを有効化します: {memory_url}")
+        log_info(f"PostgreSQLポート: {memory_db_port}")
         memory_client = ChatMemoryClient(memory_url)
 
     # https://docs.litellm.ai/docs/providers
@@ -267,15 +292,14 @@ def create_app(config_dir=None):
                     for session_key in timed_out_sessions:
                         try:
                             user_id, session_id = session_key.split(":", 1)
-                            # バックグラウンドでも確実にログが表示されるようにprint文
-                            print(f"[INFO] セッションタイムアウト検出: {session_key}", flush=True)
+                            log_info(f"セッションタイムアウト検出: {session_key}")
                             await memory_client.create_summary(user_id, session_id)
                             del session_last_activity[session_key]
                         except Exception as e:
-                            print(f"[ERROR] タイムアウト処理エラー: {e}", flush=True)
+                            log_error(f"タイムアウト処理エラー: {e}")
 
                 except Exception as e:
-                    print(f"[ERROR] セッションタイムアウトチェックエラー: {e}", flush=True)
+                    log_error(f"セッションタイムアウトチェックエラー: {e}")
 
         # 会話終了時に履歴を保存
         @sts.on_finish
@@ -365,6 +389,7 @@ def create_app(config_dir=None):
         @sts.llm.tool(memory_search_spec)
         async def search_memory(query: str, metadata: dict = None):
             """過去の記憶を検索"""
+            log_debug(f"ツール呼び出し: search_memory(query='{query}')")
             user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
             result = await memory_client.search(user_id, query)
             if result:
@@ -375,6 +400,7 @@ def create_app(config_dir=None):
         @sts.llm.tool(add_knowledge_spec)
         async def add_knowledge(knowledge: str, metadata: dict = None):
             """重要な情報をナレッジとして保存"""
+            log_debug(f"ツール呼び出し: add_knowledge(knowledge='{knowledge}')")
             user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
             await memory_client.add_knowledge(user_id, knowledge)
             return f"ナレッジを保存しました: {knowledge}"
@@ -382,6 +408,7 @@ def create_app(config_dir=None):
         @sts.llm.tool(forget_memory_spec)
         async def forget_memory(topic: str, metadata: dict = None):
             """特定の事柄に関する記憶を削除"""
+            log_debug(f"ツール呼び出し: forget_memory(topic='{topic}')")
             user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
             session_id = metadata.get("session_id") if metadata else None
 
@@ -399,7 +426,7 @@ def create_app(config_dir=None):
                     if topic.lower() in knowledge_text.lower():
                         await memory_client.delete_knowledge(user_id, knowledge_id)
                         deleted_count += 1
-                        print(f"[INFO] 削除したナレッジ: {knowledge_text}", flush=True)
+                        log_info(f"削除したナレッジ: {knowledge_text}")
 
             result_message = ""
             if deleted_count > 0:
@@ -419,6 +446,7 @@ def create_app(config_dir=None):
         @sts.llm.tool(delete_session_spec)
         async def delete_current_session(metadata: dict = None):
             """現在のセッションの履歴と要約を削除"""
+            log_debug("ツール呼び出し: delete_current_session()")
             user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
             session_id = metadata.get("session_id") if metadata else None
 
@@ -496,10 +524,10 @@ forget_memoryツールの実行後、現在のセッションの履歴削除に�
             for session_key in list(session_last_activity.keys()):
                 try:
                     user_id, session_id = session_key.split(":", 1)
-                    print(f"[INFO] シャットダウン時の要約生成: {session_key}", flush=True)
+                    log_info(f"シャットダウン時の要約生成: {session_key}")
                     await memory_client.create_summary(user_id, session_id)
                 except Exception as e:
-                    print(f"[ERROR] シャットダウン時の要約生成エラー: {e}", flush=True)
+                    log_error(f"シャットダウン時の要約生成エラー: {e}")
 
             await memory_client.close()
 
