@@ -3,7 +3,8 @@
     "allow": [
       "Bash(find:*)",
       "Bash(ruff format:*)",
-      "Bash(ruff check:*)"
+      "Bash(ruff check:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }
