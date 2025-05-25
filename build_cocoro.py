@@ -26,7 +26,7 @@ BUILD_CONFIG = {
         "litellm.litellm_core_utils.llm_cost_calc",
         "litellm.litellm_core_utils.tokenizers",
     ],
-    "onefile": True,  # True: 単一実行ファイル、False: フォルダ形式
+    "onefile": False,  # True: 単一実行ファイル、False: フォルダ形式
     "console": False,  # True: コンソール表示、False: 非表示
     "datas": [
         # tiketokenのエンコーディングモジュール全体を含める
@@ -110,7 +110,11 @@ def build_cocoro(config=None):
     subprocess.call(pyinstaller_args)
 
     # 結果確認
-    exe_path = Path("dist") / f"{app_name}.exe"
+    # ビルド結果の確認（onefile設定に応じて判定方法を変更）
+    if build_config["onefile"]:
+        exe_path = Path("dist") / f"{app_name}.exe"
+    else:
+        exe_path = Path("dist") / app_name / f"{app_name}.exe"
     if exe_path.exists():
         print(f"\n✨ ビルド成功！実行ファイル: {exe_path}")
         return True
