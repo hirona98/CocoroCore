@@ -11,33 +11,16 @@ BUILD_CONFIG = {
     "app_name": "CocoroCore",
     "icon_path": None,  # アイコンが必要な場合は "resources/icon.ico" などを指定
     "hidden_imports": [
+        # 最小限の必要なインポート
         "tiktoken",
-        "tiktoken.registry",
-        "tiktoken._registry",
-        "tiktoken.model",
         "tiktoken.core",
-        "tiktoken.load",
-        "tiktoken._educational",
         "litellm",
         "litellm.utils",
-        "litellm.llms",
-        "litellm.cost_calculator",
-        "litellm.litellm_core_utils",
-        "litellm.litellm_core_utils.llm_cost_calc",
         "litellm.litellm_core_utils.tokenizers",
     ],
     "onefile": False,  # True: 単一実行ファイル、False: フォルダ形式
     "console": False,  # True: コンソール表示、False: 非表示
-    "datas": [
-        # tiketokenのエンコーディングモジュール全体を含める
-        (".venv/Lib/site-packages/tiktoken", "tiktoken"),
-        (".venv/Lib/site-packages/tiktoken_ext", "tiktoken_ext"),
-        # litellmのトークナイザーデータファイルを含める
-        (
-            ".venv/Lib/site-packages/litellm/litellm_core_utils/tokenizers",
-            "litellm/litellm_core_utils/tokenizers",
-        ),
-    ],
+    "datas": [],  # 動的に設定されるため、ここでは空にする
 }
 
 
@@ -99,10 +82,29 @@ def build_cocoro(config=None):
     for imp in build_config["hidden_imports"]:
         pyinstaller_args.append(f"--hidden-import={imp}")
 
-    # データファイル設定（datas）
-    if "datas" in build_config and build_config["datas"]:
-        for src, dst in build_config["datas"]:
-            pyinstaller_args.append(f"--add-data={src};{dst}")  # メインスクリプト追加
+    # データファイル設定（動的にパスを解決）
+    # 仮想環境のsite-packagesパスを動的に取得
+    if hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
+        # 仮想環境内
+        if sys.platform == "win32":
+            site_packages = Path(sys.prefix) / "Lib" / "site-packages"
+        else:
+            site_packages = Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
+    else:
+        # システムPython
+        import site
+        site_packages = Path(site.getsitepackages()[0])
+    
+    # 必要なデータファイルを追加
+    data_files = [
+        (site_packages / "tiktoken", "tiktoken"),
+        (site_packages / "tiktoken_ext", "tiktoken_ext"),
+        (site_packages / "litellm" / "litellm_core_utils" / "tokenizers", "litellm/litellm_core_utils/tokenizers"),
+    ]
+    
+    for src, dst in data_files:
+        if src.exists():
+            pyinstaller_args.append(f"--add-data={src};{dst}")
     pyinstaller_args.append("src/main.py")
 
     # コマンド実行

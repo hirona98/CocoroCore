@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 > nul
 echo CocoroCore ビルドツール
 
 REM 仮想環境を有効化
