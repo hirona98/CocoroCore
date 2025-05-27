@@ -4,7 +4,14 @@
       "Bash(find:*)",
       "Bash(ruff format:*)",
       "Bash(ruff check:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(rg:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:docs.litellm.ai)",
+      "Bash(grep:*)",
+      "Bash(pip show:*)",
+      "Bash(python:*)",
+      "Bash(powershell:*)"
     ],
     "deny": []
   }
