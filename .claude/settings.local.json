@@ -14,5 +14,6 @@
       "Bash(powershell:*)"
     ],
     "deny": []
-  }
+  },
+  "enableAllProjectMcpServers": false
 }
