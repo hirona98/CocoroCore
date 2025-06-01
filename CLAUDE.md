@@ -11,7 +11,7 @@ CocoroCore is the backend server for CocoroAI, a desktop mascot application. It 
 ### Development Setup
 本プロジェクトは、Windowsを対象にしているが、コードの編集はWSL経由で君に手伝ってもらっている。
 参考までに、Windows上でのセットアップ方法を記載する。
-君が powershel 経由で起動してもいいよ。
+君が powershell 経由で起動してもいいよ。
 
 ```powershell
 # Create and activate virtual environment (PowerShell)
@@ -19,7 +19,7 @@ py -3.10 -m venv .venv
 .\.venv\Scripts\Activate
 
 # Install dependencies
-pip install aiavatar
+pip install -r requirements.txt
 ```
 
 ### Build and Run
@@ -32,6 +32,9 @@ pip install aiavatar
 
 # Development run
 python src/main.py -c ../CocoroAI/UserData
+
+# Deploy to CocoroAI
+.\copy_to_cocoroai.ps1
 ```
 
 ### Code Quality
@@ -39,10 +42,6 @@ python src/main.py -c ../CocoroAI/UserData
 # Format and lint with Ruff
 ruff format .
 ruff check . --fix
-
-# Type checking
-mypy src
-```
 
 ## Architecture
 
@@ -58,6 +57,7 @@ Key design decisions:
 - Uses AIAvatarKit's ChatMemory for conversation context
 - Implements custom logging to reduce console noise
 - Build process creates Windows executable using PyInstaller
+- Asyncio-based concurrent processing with proper signal handling
 
 ## Important Notes
 
@@ -65,6 +65,7 @@ Key design decisions:
 - Virtual environment should be `.venv` (not `venv`)
 - The codebase is intentionally "rough" and will be rewritten as AI technology evolves
 - When modifying build process, update both `build.bat` and `build_cocoro.py`
+- Build outputs a folder (`dist/CocoroCore/`), not a single executable
 
 ## ユーザーとのコミュニケーション
 
