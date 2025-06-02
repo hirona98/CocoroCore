@@ -3,3 +3,5 @@ aiavatar==0.7.2
 fastapi
 uvicorn
 httpx
+sse_starlette
+litellm
