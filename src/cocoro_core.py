@@ -1,4 +1,6 @@
 import asyncio
+import json
+import re
 from datetime import datetime, timedelta
 from typing import Dict, Optional
 
@@ -271,6 +273,43 @@ def create_app(config_dir=None):
         voice_recorder=DummyVoiceRecorder(),  # recorded_voicesディレクトリを生成しないようにする
     )
 
+    # 通知処理のためのon_before_llmフック
+    @sts.on_before_llm
+    async def preprocess_notification(request):
+        """通知タグを検出して処理する"""
+        if not request.text:
+            return
+
+        # 通知タグのパターン
+        notification_pattern = r"<cocoro-notification>\s*({.*?})\s*</cocoro-notification>"
+
+        # 通知タグを検出
+        notification_match = re.search(notification_pattern, request.text, re.DOTALL)
+
+        if notification_match:
+            try:
+                # 通知データをパース
+                notification_json = notification_match.group(1)
+                notification_data = json.loads(notification_json)
+                log_info(
+                    f"通知を検出: from={notification_data.get('from', '不明')}, "
+                    f"message={notification_data.get('message', '')}"
+                )
+                # 通知コンテキストを作成
+                app_name = notification_data.get("from", "不明なアプリ")
+                message = notification_data.get("message", "")
+                # リクエストのテキストを通知用に変換
+                request.text = (
+                    f"<COCORO_NOTIFICATION>アプリ「{app_name}」から通知が届きました："
+                    f"「{message}」</COCORO_NOTIFICATION>"
+                )
+
+            except json.JSONDecodeError as e:
+                log_error(f"通知データの解析に失敗しました: {e}")
+                log_error(f"通知JSON: {notification_match.group(1)}")
+            except Exception as e:
+                log_error(f"通知処理中にエラーが発生しました: {e}")
+
     # ChatMemoryとの統合
     if memory_client:
         # タイムアウトしたセッションをチェックして要約を生成する非同期タスク
@@ -477,13 +516,12 @@ def create_app(config_dir=None):
 
         # システムプロンプトに記憶機能の説明を追加
         original_prompt = llm.system_prompt
-        llm.system_prompt = (
-            original_prompt
-            + "\n\n"
+        memory_prompt = (
+            "\n\n"
             + "記憶機能について：\n"
             + "あなたは長期記憶機能を持っています。"
             + "過去の会話内容を記憶し、必要に応じて思い出すことができます。\n"
-            + "ユーザーの好み、過去の話題、個人的な情報などを聞かれた場合は、"
+            + "ユーザーの好み、過去の話題、個人的な情報などが必要な場合は、"
             + "search_memoryツールを使って記憶を検索してください。\n"
             + "\n"
             + "重要な情報の保存について：\n"
@@ -515,6 +553,33 @@ def create_app(config_dir=None):
             + "ユーザーが「はい」「削除して」「お願い」などと答えた場合は、"
             + "delete_current_sessionツールを使って削除します。"
         )
+        llm.system_prompt = original_prompt + memory_prompt
+
+    # 通知処理のガイドラインを追加（メモリ機能の有無に関わらず）
+    notification_prompt = (
+        "\n\n"
+        + "通知メッセージの処理について：\n"
+        + "あなたは時々、外部アプリケーションからの通知メッセージを受け取ることがあります。\n"
+        + "通知は<COCORO_NOTIFICATION>タグで囲まれており、アプリ名と通知内容が含まれています。\n"
+        + "\n"
+        + "通知を受けた時の振る舞い：\n"
+        + "1. アプリ名と通知内容をユーザーに伝えてください\n"
+        + "2. 単に通知内容を繰り返すのではなく、感情的な反応や関連するコメントを加えてください\n"
+        + "\n"
+        + "通知への反応例：\n"
+        + "- カレンダーアプリからの予定通知 → 「カレンダーから通知だよ！準備しなきゃ！」\n"
+        + "- メールアプリからの新着通知 → 「メールアプリからお知らせ！誰からのメールかな～？」\n"
+        + "- アラームアプリからの通知 → 「アラームが鳴ってるよ！時間だね、頑張って！」\n"
+        + "- タスク管理アプリからの通知 → 「タスクアプリから連絡！やることがあるみたいだね」\n"
+        + "\n"
+        + "重要：\n"
+        + "- 通知に対する反応は短く、自然に\n"
+        + "- あなたのキャラクターの個性を活かしてください\n"
+        + "- ユーザーが次の行動を取りやすいように励ましたり、応援したりしてください"
+    )
+
+    # システムプロンプトに通知処理のガイドラインを追加
+    llm.system_prompt = llm.system_prompt + notification_prompt
 
     # AIAvatarインスタンスを作成
     aiavatar_app = AIAvatarHttpServer(
