@@ -550,7 +550,7 @@ def create_app(config_dir=None):
             + "セッション削除の確認：\n"
             + "forget_memoryツールの実行後、"
             + "現在のセッションの履歴削除についてユーザーに確認を取ります。\n"
-            + "ユーザーが「はい」「削除して」「お願い」などと答えた場合は、"
+            + "ユーザーが明確に削除の指示をした場合は、"
             + "delete_current_sessionツールを使って削除します。"
         )
         llm.system_prompt = original_prompt + memory_prompt
