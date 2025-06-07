@@ -84,24 +84,35 @@ def build_cocoro(config=None):
 
     # データファイル設定（動的にパスを解決）
     # 仮想環境のsite-packagesパスを動的に取得
-    if hasattr(sys, 'real_prefix') or (hasattr(sys, 'base_prefix') and sys.base_prefix != sys.prefix):
+    if hasattr(sys, "real_prefix") or (
+        hasattr(sys, "base_prefix") and sys.base_prefix != sys.prefix
+    ):
         # 仮想環境内
         if sys.platform == "win32":
             site_packages = Path(sys.prefix) / "Lib" / "site-packages"
         else:
-            site_packages = Path(sys.prefix) / "lib" / f"python{sys.version_info.major}.{sys.version_info.minor}" / "site-packages"
+            site_packages = (
+                Path(sys.prefix)
+                / "lib"
+                / f"python{sys.version_info.major}.{sys.version_info.minor}"
+                / "site-packages"
+            )
     else:
         # システムPython
         import site
+
         site_packages = Path(site.getsitepackages()[0])
-    
+
     # 必要なデータファイルを追加
     data_files = [
         (site_packages / "tiktoken", "tiktoken"),
         (site_packages / "tiktoken_ext", "tiktoken_ext"),
-        (site_packages / "litellm" / "litellm_core_utils" / "tokenizers", "litellm/litellm_core_utils/tokenizers"),
+        (
+            site_packages / "litellm" / "litellm_core_utils" / "tokenizers",
+            "litellm/litellm_core_utils/tokenizers",
+        ),
     ]
-    
+
     for src, dst in data_files:
         if src.exists():
             pyinstaller_args.append(f"--add-data={src};{dst}")
