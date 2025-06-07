@@ -1,10 +1,8 @@
-# Python開発用ツール
-ruff==0.3.0  # リンターとフォーマッターが統合されたツール
-mypy==1.9.0  # 型チェッカー
+ruff==0.3.0
+mypy==1.9.0
 pytest==8.0.0
 pytest-cov==4.1.0
-pre-commit==4.2.0  # 最新バージョンに更新
+pre-commit==4.2.0
 
-# 型関連
 types-requests
 types-PyYAML
