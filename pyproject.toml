@@ -29,16 +29,3 @@ exclude = ["venv", ".venv", "build", "dist", "__pycache__"]
 # isortの設定
 [tool.ruff.lint.isort]
 known-first-party = ["cocoro_core"]
-
-# 型チェック用のmypy設定
-[tool.mypy]
-python_version = "3.10"
-warn_return_any = true
-warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-
-[[tool.mypy.overrides]]
-module = "tests.*"
-disallow_untyped_defs = false
-disallow_incomplete_defs = false
