@@ -1,5 +1,5 @@
 # Core dependencies
-aiavatar==0.7.2
+aiavatar
 fastapi
 uvicorn
 httpx
