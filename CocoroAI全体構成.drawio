@@ -1,140 +1,140 @@
-<mxfile host="app.diagrams.net" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36" version="27.1.4">
-  <diagram name="ページ1" id="o39PR-zt318VI3z1FR7i">
-    <mxGraphModel dx="1024" dy="1085" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
-      <root>
-        <mxCell id="0" />
-        <mxCell id="1" parent="0" />
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-26" value="設定値" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" vertex="1" parent="1">
-          <mxGeometry x="667" y="486" width="80" height="70" as="geometry" />
-        </mxCell>
-        <mxCell id="6kX_ImcDoe10UNFtOpr_-4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" parent="1" source="6kX_ImcDoe10UNFtOpr_-1" target="6kX_ImcDoe10UNFtOpr_-3" edge="1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="6kX_ImcDoe10UNFtOpr_-7" value="チャットテキスト&lt;div&gt;通知要求&lt;br&gt;&lt;div&gt;設定値参照&lt;/div&gt;&lt;div&gt;設定リロード要求&lt;/div&gt;&lt;div&gt;アニメーション要求&lt;div&gt;&lt;div&gt;（WebSocket）&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="6kX_ImcDoe10UNFtOpr_-4" vertex="1" connectable="0">
-          <mxGeometry x="-0.525" y="1" relative="1" as="geometry">
-            <mxPoint x="-3" y="29" as="offset" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-27" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=1;exitDx=0;exitDy=0;" edge="1" parent="1" source="6kX_ImcDoe10UNFtOpr_-1" target="T6iqkIKa1ZIXDyA9mMyS-26">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-28" value="Read/Write" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="T6iqkIKa1ZIXDyA9mMyS-27">
-          <mxGeometry x="0.1871" y="-5" relative="1" as="geometry">
-            <mxPoint x="5" y="-21" as="offset" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="6kX_ImcDoe10UNFtOpr_-1" value="&lt;div&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;チャット &amp;amp;&amp;nbsp;&lt;/span&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;設定画面&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;CocoroDock = CocoroAI.exe&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
-          <mxGeometry x="269" y="191" width="233" height="69" as="geometry" />
-        </mxCell>
-        <mxCell id="6kX_ImcDoe10UNFtOpr_-6" value="" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="6kX_ImcDoe10UNFtOpr_-3" target="6kX_ImcDoe10UNFtOpr_-5" edge="1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-20" value="チャットテキスト&lt;div&gt;通知要求&lt;/div&gt;&lt;div&gt;（REST API）&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="6kX_ImcDoe10UNFtOpr_-6">
-          <mxGeometry x="-0.5385" y="2" relative="1" as="geometry">
-            <mxPoint x="-6" y="11" as="offset" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-9" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.75;entryY=1;entryDx=0;entryDy=0;exitX=0.75;exitY=0;exitDx=0;exitDy=0;" edge="1" parent="1" source="6kX_ImcDoe10UNFtOpr_-3" target="6kX_ImcDoe10UNFtOpr_-1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-10" value="チャットテキスト&lt;div&gt;&lt;div&gt;（WebSocket）&lt;/div&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="T6iqkIKa1ZIXDyA9mMyS-9">
-          <mxGeometry x="0.6694" y="4" relative="1" as="geometry">
-            <mxPoint x="5" y="80" as="offset" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-29" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=oval;endFill=1;" edge="1" parent="1" source="6kX_ImcDoe10UNFtOpr_-3" target="T6iqkIKa1ZIXDyA9mMyS-26">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-30" value="Read" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="T6iqkIKa1ZIXDyA9mMyS-29">
-          <mxGeometry x="-0.3099" y="-2" relative="1" as="geometry">
-            <mxPoint x="18" y="-15" as="offset" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-43" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="6kX_ImcDoe10UNFtOpr_-3" target="T6iqkIKa1ZIXDyA9mMyS-41">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-45" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="6kX_ImcDoe10UNFtOpr_-3" target="T6iqkIKa1ZIXDyA9mMyS-44">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="6kX_ImcDoe10UNFtOpr_-3" value="&lt;div&gt;VRM表示機能&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;CocoroShell&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
-          <mxGeometry x="273" y="394" width="233" height="88" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-23" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="6kX_ImcDoe10UNFtOpr_-5" target="T6iqkIKa1ZIXDyA9mMyS-22">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-31" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0;exitDx=0;exitDy=0;endArrow=oval;endFill=1;" edge="1" parent="1" source="6kX_ImcDoe10UNFtOpr_-5" target="T6iqkIKa1ZIXDyA9mMyS-26">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-32" value="Read" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="T6iqkIKa1ZIXDyA9mMyS-31">
-          <mxGeometry x="0.3786" y="-1" relative="1" as="geometry">
-            <mxPoint x="-36" y="2" as="offset" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-36" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="6kX_ImcDoe10UNFtOpr_-5" target="T6iqkIKa1ZIXDyA9mMyS-35">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-37" value="チャットテキスト&lt;div&gt;&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212)); color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;（REST API）&lt;/span&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="T6iqkIKa1ZIXDyA9mMyS-36">
-          <mxGeometry x="-0.7417" y="-2" relative="1" as="geometry">
-            <mxPoint x="2" y="13" as="offset" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="6kX_ImcDoe10UNFtOpr_-5" value="&lt;div&gt;LLM呼び出し機能&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;CocoroCore&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
-          <mxGeometry x="276" y="567" width="235" height="89" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-2" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" edge="1" parent="1" source="T6iqkIKa1ZIXDyA9mMyS-1" target="6kX_ImcDoe10UNFtOpr_-1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-3" value="チャット&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212)); color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;テキスト&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="T6iqkIKa1ZIXDyA9mMyS-2">
-          <mxGeometry x="-0.5569" y="-2" relative="1" as="geometry">
-            <mxPoint x="44" y="-26" as="offset" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-7" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.25;entryDx=0;entryDy=0;startArrow=classic;startFill=1;" edge="1" parent="1" source="T6iqkIKa1ZIXDyA9mMyS-1" target="6kX_ImcDoe10UNFtOpr_-3">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-8" value="チャット音声" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="T6iqkIKa1ZIXDyA9mMyS-7">
-          <mxGeometry x="-0.4087" y="-1" relative="1" as="geometry">
-            <mxPoint x="14" y="16" as="offset" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-1" value="User" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" vertex="1" parent="1">
-          <mxGeometry x="69" y="195.5" width="30" height="60" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-5" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" edge="1" parent="1" source="T6iqkIKa1ZIXDyA9mMyS-4" target="6kX_ImcDoe10UNFtOpr_-1">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-6" value="通知要求&lt;div&gt;&lt;div&gt;（REST API）&lt;/div&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="T6iqkIKa1ZIXDyA9mMyS-5">
-          <mxGeometry x="-0.4198" y="-2" relative="1" as="geometry">
-            <mxPoint x="-29" y="-28" as="offset" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-4" value="ツール" style="html=1;whiteSpace=wrap;shape=isoCube2;backgroundOutline=1;isoAngle=20.714285714285715;" vertex="1" parent="1">
-          <mxGeometry x="638" y="191" width="90" height="70" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-22" value="LLM" style="ellipse;shape=doubleEllipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="71" y="584" width="100" height="60" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-38" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=oval;endFill=1;" edge="1" parent="1" source="T6iqkIKa1ZIXDyA9mMyS-35" target="T6iqkIKa1ZIXDyA9mMyS-26">
-          <mxGeometry relative="1" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-39" value="Read" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="T6iqkIKa1ZIXDyA9mMyS-38">
-          <mxGeometry x="0.3543" y="-2" relative="1" as="geometry">
-            <mxPoint as="offset" />
-          </mxGeometry>
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-35" value="&lt;div&gt;記憶保持機能&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;CocoroMemory&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="275.5" y="716" width="236" height="82" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-40" value="CocoroAI全体構成" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontStyle=1;fontSize=16;" vertex="1" parent="1">
-          <mxGeometry x="55" y="126" width="149" height="31" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-41" value="音声合成" style="ellipse;shape=doubleEllipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="74" y="385" width="100" height="60" as="geometry" />
-        </mxCell>
-        <mxCell id="T6iqkIKa1ZIXDyA9mMyS-44" value="音声認識" style="ellipse;shape=doubleEllipse;whiteSpace=wrap;html=1;" vertex="1" parent="1">
-          <mxGeometry x="71" y="475" width="100" height="60" as="geometry" />
-        </mxCell>
-      </root>
-    </mxGraphModel>
-  </diagram>
+<mxfile host="65bd71144e">
+    <diagram name="ページ1" id="o39PR-zt318VI3z1FR7i">
+        <mxGraphModel dx="795" dy="707" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-26" value="設定値" style="shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;" parent="1" vertex="1">
+                    <mxGeometry x="667" y="486" width="80" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="6kX_ImcDoe10UNFtOpr_-4" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" parent="1" source="6kX_ImcDoe10UNFtOpr_-1" target="6kX_ImcDoe10UNFtOpr_-3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="6kX_ImcDoe10UNFtOpr_-7" value="チャットテキスト&lt;div&gt;通知要求&lt;br&gt;&lt;div&gt;設定値参照&lt;/div&gt;&lt;div&gt;設定リロード要求&lt;/div&gt;&lt;div&gt;アニメーション要求&lt;div&gt;&lt;div&gt;（WebSocket）&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="6kX_ImcDoe10UNFtOpr_-4" vertex="1" connectable="0">
+                    <mxGeometry x="-0.525" y="1" relative="1" as="geometry">
+                        <mxPoint x="-3" y="29" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-27" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=1;exitDx=0;exitDy=0;" parent="1" source="6kX_ImcDoe10UNFtOpr_-1" target="T6iqkIKa1ZIXDyA9mMyS-26" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-28" value="Read/Write" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="T6iqkIKa1ZIXDyA9mMyS-27" vertex="1" connectable="0">
+                    <mxGeometry x="0.1871" y="-5" relative="1" as="geometry">
+                        <mxPoint x="5" y="-21" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="6kX_ImcDoe10UNFtOpr_-1" value="&lt;div&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;チャット &amp;amp;&amp;nbsp;&lt;/span&gt;&lt;span style=&quot;background-color: transparent; color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;設定画面&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;CocoroDock = CocoroAI.exe&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="269" y="191" width="233" height="69" as="geometry"/>
+                </mxCell>
+                <mxCell id="6kX_ImcDoe10UNFtOpr_-6" value="" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="6kX_ImcDoe10UNFtOpr_-3" target="6kX_ImcDoe10UNFtOpr_-5" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-20" value="チャットテキスト&lt;div&gt;通知要求&lt;/div&gt;&lt;div&gt;（REST API）&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="6kX_ImcDoe10UNFtOpr_-6" vertex="1" connectable="0">
+                    <mxGeometry x="-0.5385" y="2" relative="1" as="geometry">
+                        <mxPoint x="-6" y="11" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-9" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0.75;entryY=1;entryDx=0;entryDy=0;exitX=0.75;exitY=0;exitDx=0;exitDy=0;" parent="1" source="6kX_ImcDoe10UNFtOpr_-3" target="6kX_ImcDoe10UNFtOpr_-1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-10" value="チャットテキスト&lt;div&gt;&lt;div&gt;（WebSocket）&lt;/div&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="T6iqkIKa1ZIXDyA9mMyS-9" vertex="1" connectable="0">
+                    <mxGeometry x="0.6694" y="4" relative="1" as="geometry">
+                        <mxPoint x="5" y="80" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-29" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=oval;endFill=1;" parent="1" source="6kX_ImcDoe10UNFtOpr_-3" target="T6iqkIKa1ZIXDyA9mMyS-26" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-30" value="Read" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="T6iqkIKa1ZIXDyA9mMyS-29" vertex="1" connectable="0">
+                    <mxGeometry x="-0.3099" y="-2" relative="1" as="geometry">
+                        <mxPoint x="18" y="-15" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-43" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="6kX_ImcDoe10UNFtOpr_-3" target="T6iqkIKa1ZIXDyA9mMyS-41" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-45" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="6kX_ImcDoe10UNFtOpr_-3" target="T6iqkIKa1ZIXDyA9mMyS-44" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="6kX_ImcDoe10UNFtOpr_-3" value="&lt;div&gt;VRM表示機能&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;CocoroShell(ChatdollKit)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="272" y="388" width="233" height="76" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-23" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="6kX_ImcDoe10UNFtOpr_-5" target="T6iqkIKa1ZIXDyA9mMyS-22" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-31" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=1;exitY=0;exitDx=0;exitDy=0;endArrow=oval;endFill=1;" parent="1" source="6kX_ImcDoe10UNFtOpr_-5" target="T6iqkIKa1ZIXDyA9mMyS-26" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-32" value="Read" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="T6iqkIKa1ZIXDyA9mMyS-31" vertex="1" connectable="0">
+                    <mxGeometry x="0.3786" y="-1" relative="1" as="geometry">
+                        <mxPoint x="-36" y="2" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-36" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="6kX_ImcDoe10UNFtOpr_-5" target="T6iqkIKa1ZIXDyA9mMyS-35" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-37" value="チャットテキスト&lt;div&gt;&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212)); color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;（REST API）&lt;/span&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="T6iqkIKa1ZIXDyA9mMyS-36" vertex="1" connectable="0">
+                    <mxGeometry x="-0.7417" y="-2" relative="1" as="geometry">
+                        <mxPoint x="2" y="13" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="6kX_ImcDoe10UNFtOpr_-5" value="&lt;div&gt;LLM呼び出し機能&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;CocoroCore(AIAvatarKit)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="271" y="543" width="235" height="79" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-2" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;startArrow=classic;startFill=1;" parent="1" source="T6iqkIKa1ZIXDyA9mMyS-1" target="6kX_ImcDoe10UNFtOpr_-1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-3" value="チャット&lt;span style=&quot;background-color: light-dark(#ffffff, var(--ge-dark-color, #121212)); color: light-dark(rgb(0, 0, 0), rgb(255, 255, 255));&quot;&gt;テキスト&lt;/span&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="T6iqkIKa1ZIXDyA9mMyS-2" vertex="1" connectable="0">
+                    <mxGeometry x="-0.5569" y="-2" relative="1" as="geometry">
+                        <mxPoint x="44" y="-26" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-7" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;entryX=0;entryY=0.25;entryDx=0;entryDy=0;startArrow=classic;startFill=1;" parent="1" source="T6iqkIKa1ZIXDyA9mMyS-1" target="6kX_ImcDoe10UNFtOpr_-3" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-8" value="チャット音声" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="T6iqkIKa1ZIXDyA9mMyS-7" vertex="1" connectable="0">
+                    <mxGeometry x="-0.4087" y="-1" relative="1" as="geometry">
+                        <mxPoint x="14" y="16" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-1" value="User" style="shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;" parent="1" vertex="1">
+                    <mxGeometry x="69" y="195.5" width="30" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-5" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;" parent="1" source="T6iqkIKa1ZIXDyA9mMyS-4" target="6kX_ImcDoe10UNFtOpr_-1" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-6" value="通知要求&lt;div&gt;&lt;div&gt;（REST API）&lt;/div&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="T6iqkIKa1ZIXDyA9mMyS-5" vertex="1" connectable="0">
+                    <mxGeometry x="-0.4198" y="-2" relative="1" as="geometry">
+                        <mxPoint x="-29" y="-28" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-4" value="ツール" style="html=1;whiteSpace=wrap;shape=isoCube2;backgroundOutline=1;isoAngle=20.714285714285715;" parent="1" vertex="1">
+                    <mxGeometry x="638" y="191" width="90" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-22" value="LLM" style="ellipse;shape=doubleEllipse;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="71" y="584" width="100" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-38" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=oval;endFill=1;" parent="1" source="T6iqkIKa1ZIXDyA9mMyS-35" target="T6iqkIKa1ZIXDyA9mMyS-26" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-39" value="Read" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="T6iqkIKa1ZIXDyA9mMyS-38" vertex="1" connectable="0">
+                    <mxGeometry x="0.3543" y="-2" relative="1" as="geometry">
+                        <mxPoint as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-35" value="&lt;div&gt;記憶保持機能&lt;/div&gt;&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;CocoroMemory(chatmemory)&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="270.5" y="698" width="236" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-40" value="CocoroAI全体構成" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;strokeColor=none;fillColor=none;fontStyle=1;fontSize=16;" parent="1" vertex="1">
+                    <mxGeometry x="55" y="126" width="149" height="31" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-41" value="音声合成" style="ellipse;shape=doubleEllipse;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="74" y="385" width="100" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="T6iqkIKa1ZIXDyA9mMyS-44" value="音声認識" style="ellipse;shape=doubleEllipse;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+                    <mxGeometry x="71" y="475" width="100" height="60" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
 </mxfile>
