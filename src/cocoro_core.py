@@ -140,54 +140,37 @@ def create_app(config_dir=None):
     @sts.on_before_llm
     async def preprocess_notification(request):
         """通知タグを検出して処理する"""
-        # メタデータから通知を検出
-        if request.metadata and "notification" in request.metadata:
-            notification = request.metadata["notification"]
-            app_name = notification.get("from", "不明なアプリ")
-            message = notification.get("message", "")
+        # テキスト内の通知タグを検出
+        if request.text and "<cocoro-notification>" in request.text:
+            logger.debug("通知メッセージを処理中")
+            # 旧形式の通知タグを新形式に変換
+            notification_pattern = r"<cocoro-notification>\s*({.*?})\s*</cocoro-notification>"
+            notification_match = re.search(notification_pattern, request.text, re.DOTALL)
             
-            # 通知をユーザーメッセージとして扱う
-            notification_text = (
-                f"<COCORO_NOTIFICATION>アプリ「{app_name}」から通知が届きました："
-                f"「{message}」</COCORO_NOTIFICATION>"
-            )
-            
-            # 既存のテキストがあれば追加、なければ新規設定
-            if request.text:
-                request.text = f"{notification_text}\n{request.text}"
-            else:
-                request.text = notification_text
-            
-            # ログは機密情報をマスク
-            masked_message = mask_sensitive_data(message)
-            logger.info(f"通知を検出: from={app_name}, message={masked_message}")
-            return
-        
-        # 旧形式の通知タグ検出（後方互換性のため）
-        if not request.text:
-            return
-        
-        notification_pattern = r"<cocoro-notification>\s*({.*?})\s*</cocoro-notification>"
-        notification_match = re.search(notification_pattern, request.text, re.DOTALL)
-        
-        if notification_match:
-            try:
-                notification_json = notification_match.group(1)
-                notification_data = json.loads(notification_json)
-                logger.info(
-                    f"旧形式の通知を検出: from={notification_data.get('from', '不明')}, "
-                    f"message={notification_data.get('message', '')}"
-                )
-                app_name = notification_data.get("from", "不明なアプリ")
-                message = notification_data.get("message", "")
-                request.text = (
-                    f"<COCORO_NOTIFICATION>アプリ「{app_name}」から通知が届きました："
-                    f"「{message}」</COCORO_NOTIFICATION>"
-                )
-            except json.JSONDecodeError as e:
-                logger.error(f"通知データの解析に失敗しました: {e}")
-            except Exception as e:
-                logger.error(f"通知処理中にエラーが発生しました: {e}")
+            if notification_match:
+                try:
+                    notification_json = notification_match.group(1)
+                    notification_data = json.loads(notification_json)
+                    app_name = notification_data.get("from", "不明なアプリ")
+                    message = notification_data.get("message", "")
+                    
+                    # 旧形式を新形式に変換
+                    notification_text = (
+                        f"<COCORO_NOTIFICATION>アプリ「{app_name}」から通知が届きました："
+                        f"「{message}」</COCORO_NOTIFICATION>"
+                    )
+                    
+                    # テキスト全体を置換
+                    request.text = re.sub(
+                        notification_pattern,
+                        notification_text,
+                        request.text,
+                        flags=re.DOTALL
+                    )
+                    
+                    logger.info(f"通知を処理: from={app_name}")
+                except Exception as e:
+                    logger.error(f"通知の解析エラー: {e}")
     
     # 応答送信処理
     @sts.on_finish
