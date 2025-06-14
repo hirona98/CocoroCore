@@ -378,7 +378,8 @@ def get_log_config():
             },
         },
         "loggers": {
-            "uvicorn": {"handlers": ["console"], "level": "INFO"},
-            "uvicorn.access": {"handlers": ["console"], "level": "INFO"},
+            "uvicorn": {"handlers": ["console"], "level": "INFO", "propagate": False},
+            "uvicorn.error": {"handlers": ["console"], "level": "INFO", "propagate": False},
+            "uvicorn.access": {"handlers": ["console"], "level": "INFO", "propagate": False},
         },
     }
