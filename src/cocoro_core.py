@@ -176,58 +176,66 @@ def create_app(config_dir=None):
     @sts.on_finish
     async def on_response_complete(request, response):
         """AI応答完了時の処理"""
-        # セッションアクティビティを更新
+        # セッションアクティビティを更新（これは待つ必要がある）
         await session_manager.update_activity(
             request.user_id or 'default_user',
             request.session_id
         )
         
-        # ChatMemory処理（メモリー機能が有効な場合）
-        if memory_client:
-            await memory_client.enqueue_messages(request, response)
-            await memory_client.save_history(
-                user_id=request.user_id or "default_user",
-                session_id=request.session_id,
-                channel="cocoro_ai"
-            )
+        # 以下の処理をすべて非同期タスクとして起動（待たない）
+        async def send_to_external_services():
+            """外部サービスへの送信を非同期で実行"""
+            try:
+                # ChatMemory処理（メモリー機能が有効な場合）
+                if memory_client:
+                    await memory_client.enqueue_messages(request, response)
+                    # save_historyも非同期で実行
+                    asyncio.create_task(memory_client.save_history(
+                        user_id=request.user_id or "default_user",
+                        session_id=request.session_id,
+                        channel="cocoro_ai"
+                    ))
+                
+                # 並列実行するタスクのリスト
+                tasks = []
+                
+                # CocoroDock への送信（AI応答のみ）
+                if cocoro_dock_client and response.text:
+                    tasks.append(cocoro_dock_client.send_chat_message(
+                        role="assistant",
+                        content=response.text
+                    ))
+                
+                # CocoroShell への送信
+                if cocoro_shell_client and response.text:
+                    # 音声パラメータを取得
+                    voice_params = {
+                        "speaker_id": current_char.get("voiceSpeakerId", 1),
+                        "speed": current_char.get("voiceSpeed", 1.0),
+                        "pitch": current_char.get("voicePitch", 0.0),
+                        "volume": current_char.get("voiceVolume", 1.0)
+                    }
+                    
+                    # キャラクター名を取得（複数キャラクター対応）
+                    character_name = current_char.get("name", None)
+                    
+                    tasks.append(cocoro_shell_client.send_chat_for_speech(
+                        content=response.text,
+                        voice_params=voice_params,
+                        character_name=character_name
+                    ))
+                
+                # すべてのタスクを並列実行（結果は待たない）
+                if tasks:
+                    results = await asyncio.gather(*tasks, return_exceptions=True)
+                    for i, result in enumerate(results):
+                        if isinstance(result, Exception):
+                            logger.debug(f"外部サービス送信エラー（正常動作）: {result}")
+            except Exception as e:
+                logger.error(f"外部サービス送信中の予期しないエラー: {e}")
         
-        # 並列実行するタスクのリスト
-        tasks = []
-        
-        # CocoroDock への送信（AI応答のみ）
-        if cocoro_dock_client and response.text:
-            ai_task = cocoro_dock_client.send_chat_message(
-                role="assistant",
-                content=response.text
-            )
-            tasks.append(ai_task)
-        
-        # CocoroShell への送信
-        if cocoro_shell_client and response.text:
-            # 音声パラメータを取得
-            voice_params = {
-                "speaker_id": current_char.get("voiceSpeakerId", 1),
-                "speed": current_char.get("voiceSpeed", 1.0),
-                "pitch": current_char.get("voicePitch", 0.0),
-                "volume": current_char.get("voiceVolume", 1.0)
-            }
-            
-            # キャラクター名を取得（複数キャラクター対応）
-            character_name = current_char.get("name", None)
-            
-            shell_task = cocoro_shell_client.send_chat_for_speech(
-                content=response.text,
-                voice_params=voice_params,
-                character_name=character_name
-            )
-            tasks.append(shell_task)
-        
-        # すべてのタスクを並列実行
-        if tasks:
-            results = await asyncio.gather(*tasks, return_exceptions=True)
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    logger.error(f"応答送信エラー: {result}")
+        # 外部サービスへの送信を非同期で開始（待たずに即座にリターン）
+        asyncio.create_task(send_to_external_services())
     
     # 通知処理のガイドラインをシステムプロンプトに追加
     notification_prompt = (

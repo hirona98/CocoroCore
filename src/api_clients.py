@@ -20,12 +20,10 @@ class CocoroDockClient:
         self.base_url = base_url.rstrip("/")
         # HTTPクライアントの設定を最適化
         self.client = httpx.AsyncClient(
-            timeout=httpx.Timeout(timeout, connect=5.0),
+            timeout=httpx.Timeout(10.0, connect=3.0),  # 非同期化したので長めでOK
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
             http2=False  # ローカル接続なのでHTTP/1.1で十分
         )
-        self.retry_count = 3
-        self.retry_delay = 1.0
 
     async def send_chat_message(self, role: str, content: str) -> bool:
         """
@@ -40,22 +38,17 @@ class CocoroDockClient:
         """
         payload = {"role": role, "content": content, "timestamp": datetime.now().isoformat()}
 
-        for attempt in range(self.retry_count):
-            try:
-                response = await self.client.post(f"{self.base_url}/api/addChatUi", json=payload)
-                response.raise_for_status()
-                logger.debug(f"CocoroDockへのメッセージ送信成功: role={role}")
-                return True
-            except httpx.ConnectError:
-                if attempt < self.retry_count - 1:
-                    logger.info(f"CocoroDock接続エラー。再試行 {attempt + 1}/{self.retry_count}")
-                    await asyncio.sleep(self.retry_delay * (attempt + 1))
-                    continue
-                logger.error("CocoroDock接続失敗。処理を継続します。")
-                return False
-            except Exception as e:
-                logger.error(f"CocoroDock送信エラー: {e}")
-                return False
+        try:
+            response = await self.client.post(f"{self.base_url}/api/addChatUi", json=payload)
+            response.raise_for_status()
+            logger.debug(f"CocoroDockへのメッセージ送信成功: role={role}")
+            return True
+        except httpx.ConnectError:
+            logger.debug("CocoroDock未起動。処理を継続します。")
+            return False
+        except Exception as e:
+            logger.error(f"CocoroDock送信エラー: {e}")
+            return False
 
     async def get_config(self) -> Optional[Dict[str, Any]]:
         """
@@ -130,12 +123,10 @@ class CocoroShellClient:
         self.base_url = base_url.rstrip("/")
         # HTTPクライアントの設定を最適化
         self.client = httpx.AsyncClient(
-            timeout=httpx.Timeout(timeout, connect=5.0),
+            timeout=httpx.Timeout(10.0, connect=3.0),  # 非同期化したので長めでOK
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
             http2=False  # ローカル接続なのでHTTP/1.1で十分
         )
-        self.retry_count = 3
-        self.retry_delay = 1.0
 
     async def send_chat_for_speech(
         self,
@@ -160,22 +151,17 @@ class CocoroShellClient:
         if character_name:
             payload["character_name"] = character_name
 
-        for attempt in range(self.retry_count):
-            try:
-                response = await self.client.post(f"{self.base_url}/api/chat", json=payload)
-                response.raise_for_status()
-                logger.debug("CocoroShellへの音声合成要求成功")
-                return True
-            except httpx.ConnectError:
-                if attempt < self.retry_count - 1:
-                    logger.info(f"CocoroShell接続エラー。再試行 {attempt + 1}/{self.retry_count}")
-                    await asyncio.sleep(self.retry_delay * (attempt + 1))
-                    continue
-                logger.error("CocoroShell接続失敗。処理を継続します。")
-                return False
-            except Exception as e:
-                logger.error(f"CocoroShell送信エラー: {e}")
-                return False
+        try:
+            response = await self.client.post(f"{self.base_url}/api/chat", json=payload)
+            response.raise_for_status()
+            logger.debug("CocoroShellへの音声合成要求成功")
+            return True
+        except httpx.ConnectError:
+            logger.debug("CocoroShell未起動。処理を継続します。")
+            return False
+        except Exception as e:
+            logger.error(f"CocoroShell送信エラー: {e}")
+            return False
 
     async def send_animation(self, animation_name: str) -> bool:
         """

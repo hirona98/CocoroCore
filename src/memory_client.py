@@ -14,7 +14,10 @@ class ChatMemoryClient:
     def __init__(self, base_url: str, timeout: float = 30.0):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
-        self.client = httpx.AsyncClient(timeout=timeout)
+        # 非同期化したので通常のタイムアウト設定に戻す
+        self.client = httpx.AsyncClient(
+            timeout=httpx.Timeout(10.0, connect=3.0)
+        )
         self._message_queue: List[Dict] = []
         self._queue_lock = asyncio.Lock()
 
@@ -63,6 +66,11 @@ class ChatMemoryClient:
             )
             response.raise_for_status()
             logger.info(f"履歴を保存しました: {len(messages)}件のメッセージ")
+        except httpx.ConnectError:
+            logger.debug("ChatMemory未起動。処理を継続します。")
+            # 失敗したメッセージをキューに戻す
+            async with self._queue_lock:
+                self._message_queue = messages + self._message_queue
         except Exception as e:
             logger.error(f"履歴の保存に失敗しました: {e}")
             # 失敗したメッセージをキューに戻す
