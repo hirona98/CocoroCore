@@ -8,6 +8,7 @@ import traceback
 import uvicorn
 
 from cocoro_core import create_app, get_log_config
+from shutdown_handler import shutdown_handler
 
 
 # シャットダウンフラグ
@@ -85,7 +86,7 @@ async def run_server(server):
     # サーバー起動タスク
     server_task = asyncio.create_task(server.serve())
 
-    # シャットダウンシグナル監視タスク
+    # シャットダウンシグナル監視タスク（2つのソースを監視）
     shutdown_task = asyncio.create_task(wait_for_shutdown())
 
     # どちらかのタスクが完了するまで待機
@@ -109,8 +110,20 @@ async def run_server(server):
 
 
 async def wait_for_shutdown():
-    """シャットダウンイベントを待機"""
-    await shutdown_event.wait()
+    """シャットダウンイベントを待機（シグナルまたはAPI経由）"""
+    # 2つのシャットダウンソースを監視
+    signal_task = asyncio.create_task(shutdown_event.wait())
+    api_task = asyncio.create_task(shutdown_handler.wait_for_shutdown())
+    
+    # どちらかが発火したらシャットダウン
+    done, pending = await asyncio.wait(
+        {signal_task, api_task}, 
+        return_when=asyncio.FIRST_COMPLETED
+    )
+    
+    # 残りをキャンセル
+    for task in pending:
+        task.cancel()
 
 
 if __name__ == "__main__":
