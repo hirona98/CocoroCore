@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram name="ページ1" id="o39PR-zt318VI3z1FR7i">
-        <mxGraphModel dx="485" dy="1097" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+        <mxGraphModel dx="391" dy="1086" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -45,7 +45,7 @@
                 <mxCell id="14" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.75;exitY=0;exitDx=0;exitDy=0;" parent="1" source="16" target="36" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="54" value="(REST)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="14">
+                <mxCell id="54" value="(REST)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="14" vertex="1" connectable="0">
                     <mxGeometry x="-0.1882" y="1" relative="1" as="geometry">
                         <mxPoint as="offset"/>
                     </mxGeometry>
@@ -118,7 +118,7 @@
                         <Array as="points"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="30" value="ツール" style="html=1;whiteSpace=wrap;shape=isoCube2;backgroundOutline=1;isoAngle=20.714285714285715;" parent="1" vertex="1">
+                <mxCell id="30" value="なんでも" style="html=1;whiteSpace=wrap;shape=isoCube2;backgroundOutline=1;isoAngle=20.714285714285715;" parent="1" vertex="1">
                     <mxGeometry x="1520" y="211" width="90" height="70" as="geometry"/>
                 </mxCell>
                 <mxCell id="31" value="LLM&lt;div&gt;&lt;span style=&quot;color: rgb(63, 63, 63);&quot;&gt;サービス&lt;/span&gt;&lt;/div&gt;" style="ellipse;shape=doubleEllipse;whiteSpace=wrap;html=1;" parent="1" vertex="1">
@@ -150,7 +150,7 @@
                 <mxCell id="48" value="画像" style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;darkOpacity=0.05;size=10;" parent="1" vertex="1">
                     <mxGeometry x="856.84" y="350" width="55" height="40" as="geometry"/>
                 </mxCell>
-                <mxCell id="52" value="&lt;div&gt;&lt;span style=&quot;background-color: transparent;&quot;&gt;外部公開&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;color: rgb(63, 63, 63);&quot;&gt;0.0.0.0&lt;/span&gt;&lt;span style=&quot;background-color: transparent;&quot;&gt;&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;background-color: transparent;&quot;&gt;REST API: 55604&lt;/span&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+                <mxCell id="52" value="&lt;div&gt;&lt;span style=&quot;background-color: transparent;&quot;&gt;外部公開&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;color: rgb(63, 63, 63);&quot;&gt;0.0.0.0&lt;/span&gt;&lt;span style=&quot;background-color: transparent;&quot;&gt;&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;background-color: transparent;&quot;&gt;REST API: 55604&lt;/span&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
                     <mxGeometry x="1320" y="212.5" width="116" height="57" as="geometry"/>
                 </mxCell>
             </root>
