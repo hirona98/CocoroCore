@@ -56,6 +56,7 @@ def create_app(config_dir=None):
     debug_mode = config.get("debug", False)
     if debug_mode:
         logger.setLevel(logging.DEBUG)
+        # logging.getLogger("aiavatar").setLevel(logging.DEBUG)
 
     # 現在のキャラクター設定を取得
     character_list = config.get("characterList", [])
@@ -123,6 +124,7 @@ def create_app(config_dir=None):
 
     if is_use_stt and stt_api_key:
         logger.info("STT（音声認識）を有効化します: AmiVoice")
+
         stt_instance = AmiVoiceSpeechRecognizer(
             amivoice_api_key=stt_api_key,
             engine="-a2-ja-general",  # 日本語汎用エンジン
@@ -152,6 +154,11 @@ def create_app(config_dir=None):
         )
         logger.info("音声アクティビティ検出（VAD）を有効化しました")
 
+        # VADのイベントハンドラーを追加
+        @vad_instance.on_speech_detected
+        async def on_speech_detected(request):
+            logger.debug(f"🔊 音声を検出しました: session_id={request.session_id}")
+
         # ウェイクワードの設定
         if stt_wake_word:
             wakewords = [stt_wake_word]
@@ -178,15 +185,20 @@ def create_app(config_dir=None):
     # on_before_llmフック（音声認識の有無に関わらず統一）
     @sts.on_before_llm
     async def handle_before_llm(request):
+        # リクエストの詳細情報をログ出力
+        logger.debug(f"[on_before_llm] request.text: '{request.text}'")
+        logger.debug(f"[on_before_llm] request.session_id: {request.session_id}")
+        logger.debug(f"[on_before_llm] request.user_id: {request.user_id}")
+
         # 音声認識結果のログ出力（STTが有効な場合）
         if is_use_stt and stt_instance and request.text:
             logger.info(
-                f"音声認識結果: '{request.text}' (session_id: {request.session_id}, user_id: {request.user_id})"
+                f"🎤 音声認識結果: '{request.text}' (session_id: {request.session_id}, user_id: {request.user_id})"
             )
             if wakewords:
                 for wakeword in wakewords:
                     if wakeword.lower() in request.text.lower():
-                        logger.info(f"ウェイクワード検出: '{wakeword}' in '{request.text}'")
+                        logger.info(f"✨ ウェイクワード検出: '{wakeword}' in '{request.text}'")
 
         # 通知タグの処理（変換は行わず、ログを出力するのみ）
         if request.text and "<cocoro-notification>" in request.text:
