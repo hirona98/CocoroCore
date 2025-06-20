@@ -129,7 +129,7 @@ def create_app(config_dir=None):
         if stt_engine == "openai":
             logger.info("STT（音声認識）を有効化します: OpenAI Whisper")
             from aiavatar.sts.stt.openai import OpenAISpeechRecognizer
-            
+
             stt_instance = OpenAISpeechRecognizer(
                 openai_api_key=stt_api_key,
                 sample_rate=16000,
@@ -138,7 +138,7 @@ def create_app(config_dir=None):
             )
         else:  # デフォルトはAmiVoice
             logger.info(f"STT（音声認識）を有効化します: AmiVoice (engine={stt_engine})")
-            
+
             stt_instance = AmiVoiceSpeechRecognizer(
                 amivoice_api_key=stt_api_key,
                 engine="-a2-ja-general",  # 日本語汎用エンジン
@@ -204,11 +204,19 @@ def create_app(config_dir=None):
         logger.debug(f"[on_before_llm] request.session_id: {request.session_id}")
         logger.debug(f"[on_before_llm] request.user_id: {request.user_id}")
 
-        # 音声認識結果のログ出力（STTが有効な場合）
+        # 音声認識結果のCocoroDockへの送信とログ出力
         if is_use_stt and stt_instance and request.text:
             logger.info(
                 f"🎤 音声認識結果: '{request.text}' (session_id: {request.session_id}, user_id: {request.user_id})"
             )
+
+            # 音声認識したテキストをCocoroDockに送信（非同期）
+            if cocoro_dock_client:
+                asyncio.create_task(
+                    cocoro_dock_client.send_chat_message(role="user", content=request.text)
+                )
+                logger.debug(f"音声認識テキストをCocoroDockに送信: '{request.text}'")
+
             if wakewords:
                 for wakeword in wakewords:
                     if wakeword.lower() in request.text.lower():
