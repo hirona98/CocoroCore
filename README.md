@@ -69,7 +69,10 @@ build.bat  # または python build_cocoro.py
     "voiceSpeakerId": 1,
     "voiceSpeed": 1.0,
     "voicePitch": 0.0,
-    "voiceVolume": 1.0
+    "voiceVolume": 1.0,
+    "isUseSTT": false,
+    "sttWakeWord": "リスティ",
+    "sttApiKey": "AmiVoice APIキー"
   }],
   "currentCharacterIndex": 0,
   "cocoroCorePort": 55601,
@@ -77,9 +80,35 @@ build.bat  # または python build_cocoro.py
   "cocoroShellPort": 55605,
   "cocoroMemoryPort": 55602,
   "enableCocoroDock": true,
-  "enableCocoroShell": true
+  "enableCocoroShell": true,
+  略
 }
 ```
+
+### 音声認識（STT）設定
+
+音声認識機能を有効にするには、キャラクター設定に以下のフィールドを追加します：
+
+- **isUseSTT**: 音声認識機能の有効/無効（デフォルト: false）
+- **sttWakeWord**: ウェイクワード（音声認識を開始するキーワード）
+- **sttApiKey**: AmiVoice APIキー
+
+#### AmiVoice APIキーの取得方法
+1. [AmiVoice Cloud Platform](https://acp.amivoice.com/) にアクセス
+2. アカウントを作成してログイン
+3. APIキーを発行
+
+#### 音声認識の動作
+- **マイクから直接音声入力**: PyAudioを使用してマイクから音声を取得
+- **音声アクティビティ検出（VAD）**: 話し始めと終わりを自動検出
+- **ウェイクワード対応**: 設定されたキーワードで音声認識を開始
+- **AmiVoice認識**: 日本語に特化した高精度な音声認識
+- 音声記録は `./voice_records` ディレクトリに保存されます（デバッグモード時のみ）
+
+#### 注意事項
+- 音声認識を使用するにはマイクデバイスが必要です
+- 初回起動時にマイクへのアクセス許可が必要な場合があります
+- Windows環境では、デフォルトの録音デバイスが使用されます
 
 ## トラブルシューティング
 

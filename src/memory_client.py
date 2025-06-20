@@ -23,6 +23,11 @@ class ChatMemoryClient:
 
     async def enqueue_messages(self, request, response):
         """メッセージをキューに追加"""
+        # contentがnullまたは空の場合はスキップ
+        if not request.text or not response.text:
+            logger.debug(f"空のメッセージをスキップ: user_content={request.text}, assistant_content={response.text}")
+            return
+            
         async with self._queue_lock:
             self._message_queue.append(
                 {

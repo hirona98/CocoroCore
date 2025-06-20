@@ -1,5 +1,6 @@
 # CocoroCore
 recorded_voices/
+voice_records/
 context.db
 performance.db
 *.code-workspace
