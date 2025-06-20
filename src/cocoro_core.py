@@ -112,8 +112,10 @@ def create_app(config_dir=None):
 
     # STT（音声認識）設定
     is_use_stt = current_char.get("isUseSTT", False)
+    stt_engine = current_char.get("sttEngine", "amivoice").lower()  # デフォルトはAmiVoice
     stt_wake_word = current_char.get("sttWakeWord", "")
     stt_api_key = current_char.get("sttApiKey", "")
+    stt_language = current_char.get("sttLanguage", "ja")  # OpenAI用の言語設定
 
     # STTインスタンスの初期化
     stt_instance = None
@@ -123,14 +125,26 @@ def create_app(config_dir=None):
     vad_instance = None
 
     if is_use_stt and stt_api_key:
-        logger.info("STT（音声認識）を有効化します: AmiVoice")
-
-        stt_instance = AmiVoiceSpeechRecognizer(
-            amivoice_api_key=stt_api_key,
-            engine="-a2-ja-general",  # 日本語汎用エンジン
-            sample_rate=16000,
-            debug=debug_mode,
-        )
+        # 音声認識エンジンの選択
+        if stt_engine == "openai":
+            logger.info("STT（音声認識）を有効化します: OpenAI Whisper")
+            from aiavatar.sts.stt.openai import OpenAISpeechRecognizer
+            
+            stt_instance = OpenAISpeechRecognizer(
+                openai_api_key=stt_api_key,
+                sample_rate=16000,
+                language=stt_language,
+                debug=debug_mode,
+            )
+        else:  # デフォルトはAmiVoice
+            logger.info(f"STT（音声認識）を有効化します: AmiVoice (engine={stt_engine})")
+            
+            stt_instance = AmiVoiceSpeechRecognizer(
+                amivoice_api_key=stt_api_key,
+                engine="-a2-ja-general",  # 日本語汎用エンジン
+                sample_rate=16000,
+                debug=debug_mode,
+            )
 
         # デバッグモード時のみ音声記録を有効化
         if debug_mode:

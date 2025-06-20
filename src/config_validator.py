@@ -24,6 +24,15 @@ def validate_config(config: dict) -> list:
         # APIキーが平文で保存されている警告
         if char.get("apiKey") and not char.get("apiKey").startswith("${"):
             warnings.append(f"キャラクター{i}: APIキーが平文で保存されています。環境変数の使用を推奨します")
+        
+        # STT設定のチェック
+        if char.get("isUseSTT"):
+            if not char.get("sttApiKey"):
+                warnings.append(f"キャラクター{i}: STTが有効ですがAPIキーが設定されていません")
+            
+            stt_engine = char.get("sttEngine", "amivoice").lower()
+            if stt_engine not in ["amivoice", "openai"]:
+                warnings.append(f"キャラクター{i}: 不正なSTTエンジン '{stt_engine}' (有効値: amivoice, openai)")
     
     # ポート番号の妥当性チェック
     ports = [
