@@ -116,37 +116,44 @@ def create_app(config_dir=None):
         temperature=1.0,
         system_prompt=system_prompt,  # キャラクター固有のプロンプトを使用
     )
-    
+
     # LLMサービスのラッパークラスを作成してcontext_idを管理
     class LLMWithSharedContext:
         def __init__(self, base_llm):
             self.base_llm = base_llm
-            # 基底クラスの属性を引き継ぐ
-            for attr in dir(base_llm):
-                if not attr.startswith("_") and not hasattr(self, attr):
-                    setattr(self, attr, getattr(base_llm, attr))
-        
+
+        def __getattr__(self, name):
+            # 属性アクセスを基底クラスに委譲
+            return getattr(self.base_llm, name)
+
+        def __setattr__(self, name, value):
+            # base_llm以外の属性は基底クラスに設定
+            if name == "base_llm":
+                super().__setattr__(name, value)
+            else:
+                setattr(self.base_llm, name, value)
+
         async def get_response(self, messages, context_id=None, **kwargs):
             # 共有context_idがあり、引数にcontext_idがない場合は使用
             if shared_context_id and not context_id:
                 context_id = shared_context_id
                 logger.debug(f"LLMレスポンスで共有context_idを使用: {context_id}")
-            
+
             # 基底クラスのget_responseを呼び出し
             return await self.base_llm.get_response(messages, context_id=context_id, **kwargs)
-        
+
         async def get_response_stream(self, messages, context_id=None, **kwargs):
             # 共有context_idがあり、引数にcontext_idがない場合は使用
             if shared_context_id and not context_id:
                 context_id = shared_context_id
                 logger.debug(f"LLMストリームレスポンスで共有context_idを使用: {context_id}")
-            
+
             # 基底クラスのget_response_streamを呼び出し
             async for chunk in self.base_llm.get_response_stream(
                 messages, context_id=context_id, **kwargs
             ):
                 yield chunk
-    
+
     # ラッパーを使用
     llm = LLMWithSharedContext(base_llm)
 
@@ -243,7 +250,7 @@ def create_app(config_dir=None):
                         logger.debug(f"VADが共有context_idを返します: {shared_context_id}")
                         return shared_context_id
                 return existing_context
-        
+
         vad_instance = VADWithSharedContext(
             volume_db_threshold=-50.0,  # 音量閾値（デシベル）
             silence_duration_threshold=0.5,  # 無音継続時間閾値（秒）
@@ -273,15 +280,15 @@ def create_app(config_dir=None):
         performance_recorder=DummyPerformanceRecorder(),
         debug=debug_mode,
     )
-    
+
     # process_requestメソッドをオーバーライドして、音声入力時のcontext_id処理を追加
     if hasattr(sts, "process_request"):
         original_process_request = sts.process_request
-        
+
         async def custom_process_request(request):
             """音声入力時に共有context_idを適用するカスタムメソッド"""
             nonlocal shared_context_id
-            
+
             # 音声入力かつ共有context_idがある場合
             if shared_context_id:
                 # SimpleNamespaceオブジェクトの場合
@@ -300,10 +307,10 @@ def create_app(config_dir=None):
                             logger.info(
                                 f"音声入力リクエスト(dict)に共有context_idを設定: {shared_context_id}"
                             )
-            
+
             # 元のメソッドを呼び出し
             return await original_process_request(request)
-        
+
         # メソッドを置き換え
         sts.process_request = custom_process_request
     else:
@@ -341,12 +348,12 @@ def create_app(config_dir=None):
     @sts.on_before_llm
     async def handle_before_llm(request):
         nonlocal shared_context_id
-        
+
         # 音声入力でcontext_idが未設定の場合、共有context_idを設定
         if shared_context_id:
             # テキストチャットか音声入力かを判定
             is_voice_input = hasattr(request, "audio_data") and request.audio_data is not None
-            
+
             if is_voice_input and not getattr(request, "context_id", None):
                 # requestオブジェクトが読み取り専用の場合があるため、
                 # 新しい属性として設定を試みる
@@ -362,7 +369,7 @@ def create_app(config_dir=None):
                     if hasattr(sts, "context_id"):
                         sts.context_id = shared_context_id
                         logger.info(f"STSパイプラインにcontext_idを直接設定: {shared_context_id}")
-        
+
         # リクエストの詳細情報をログ出力
         logger.debug(f"[on_before_llm] request.text: '{request.text}'")
         logger.debug(f"[on_before_llm] request.session_id: {request.session_id}")
@@ -430,6 +437,10 @@ def create_app(config_dir=None):
                 except Exception as e:
                     logger.error(f"通知の解析エラー: {e}")
 
+        # デスクトップモニタリング画像タグの処理
+        if request.text and "<cocoro-desktop-monitoring>" in request.text:
+            logger.info("デスクトップモニタリング画像タグを検出（独り言モード）")
+
         # LLM送信開始のステータス通知（ただし、テキストがある場合のみ）
         if cocoro_dock_client and request.text:
             asyncio.create_task(
@@ -465,7 +476,7 @@ def create_app(config_dir=None):
         if response.context_id:
             shared_context_id = response.context_id
             logger.debug(f"共有context_idを更新: {shared_context_id}")
-            
+
             # VADの全セッションに共有context_idを設定
             if vad_instance and hasattr(vad_instance, "sessions"):
                 for session_id in list(vad_instance.sessions.keys()):
@@ -554,7 +565,7 @@ def create_app(config_dir=None):
         + "- アラームアプリからの通知 → 「アラームが鳴ってるよ！時間だね、頑張って！」\n"
         + "- タスク管理アプリからの通知 → 「タスクアプリから連絡！やることがあるみたいだね」\n"
         + "\n"
-        + "重要：\n"
+        + "** 重要 **：\n"
         + "- 通知に対する反応は短く、自然に\n"
         + "- あなたのキャラクターの個性を活かしてください\n"
         + "- ユーザーが次の行動を取りやすいように励ましたり、応援したりしてください"
@@ -564,6 +575,37 @@ def create_app(config_dir=None):
     if notification_prompt and notification_prompt not in llm.system_prompt:
         llm.system_prompt = llm.system_prompt + notification_prompt
 
+    # デスクトップモニタリング（独り言）のガイドラインをシステムプロンプトに追加
+    desktop_monitoring_prompt = (
+        "\n\n"
+        + "デスクトップモニタリング（独り言）について：\n"
+        + "あなたは時々、PCの画面の画像を見ることがあります。\n"
+        + "PCの画像は <cocoro-desktop-monitoring> というテキストとともに送られます。\n"
+        + "\n"
+        + "独り言の振る舞い：\n"
+        + "1. 画像で見たものについて、独り言のように短く感想を呟く\n"
+        + "2. 自分に向けた独り言として表現する\n"
+        + "3. 画像の内容を説明するのではなく、一言二言の感想程度に留める\n"
+        + "\n"
+        + "独り言の例：\n"
+        + "- プログラミングの画面を見て → 「わー、コードがいっぱい…」「もっとエレガントに…」\n"
+        + "- ゲーム画面を見て → 「楽しそうなゲームだな〜」「遊んでばかりじゃだめですよ」\n"
+        + "- 作業中の文書を見て → 「がんばってるんだね…」「わかりやすく書くんですよ」\n"
+        + "- Webブラウザを見て → 「何か調べものかな」\n"
+        + "\n"
+        + "** 重要 **：\n"
+        + "- 独り言は短く自然に（1〜2文程度）\n"
+        + "- ユーザーへの質問や指示は含めない\n"
+        + "- キャラクターの個性に合った独り言にしてください"
+    )
+
+    # システムプロンプトにデスクトップモニタリングのガイドラインを追加（初回のみ）
+    if desktop_monitoring_prompt and desktop_monitoring_prompt not in llm.system_prompt:
+        llm.system_prompt = llm.system_prompt + desktop_monitoring_prompt
+
+    # デバッグ用：最終的なシステムプロンプトの長さをログ出力
+    logger.info(f"最終的なシステムプロンプトの長さ: {len(llm.system_prompt)} 文字")
+
     # AIAvatarインスタンスを作成
     aiavatar_app = AIAvatarHttpServer(
         sts=sts,
@@ -572,21 +614,21 @@ def create_app(config_dir=None):
 
     # STSパイプラインのinvokeメソッドをラップ
     original_invoke = sts.invoke
-    
+
     async def wrapped_invoke(request):
         nonlocal shared_context_id
-        
+
         # テキストリクエストで共有context_idがある場合
         if shared_context_id and hasattr(request, "text") and request.text:
             # context_idが未設定の場合は共有context_idを設定
             if not getattr(request, "context_id", None):
                 request.context_id = shared_context_id
                 logger.info(f"STSリクエストに共有context_idを設定: {shared_context_id}")
-        
+
         # 元のinvokeを呼び出し
         async for chunk in original_invoke(request):
             yield chunk
-    
+
     # メソッドを置き換え
     sts.invoke = wrapped_invoke
 
@@ -598,11 +640,11 @@ def create_app(config_dir=None):
     # STSパイプラインの_process_text_requestメソッドをオーバーライド
     if hasattr(sts, "_process_text_request"):
         original_process_text_request = sts._process_text_request
-        
+
         async def custom_process_text_request(request):
             """テキストリクエスト処理時に共有context_idを適用"""
             nonlocal shared_context_id
-            
+
             # 共有context_idがあり、リクエストにcontext_idがない場合は設定
             if shared_context_id and not getattr(request, "context_id", None):
                 if hasattr(request, "__dict__"):
@@ -613,10 +655,10 @@ def create_app(config_dir=None):
                     logger.info(
                         f"テキストリクエスト(dict)に共有context_idを設定: {shared_context_id}"
                     )
-            
+
             # 元のメソッドを呼び出し
             return await original_process_text_request(request)
-        
+
         sts._process_text_request = custom_process_text_request
         logger.info("STSパイプラインの_process_text_requestメソッドをオーバーライドしました")
 
@@ -709,17 +751,17 @@ def create_app(config_dir=None):
                             default_session_id, "context_id", shared_context_id
                         )
                         logger.info(f"VADに共有context_idを設定: {shared_context_id}")
-                    
+
                     logger.info(
                         f"VADセッション設定完了: session_id={default_session_id}, user_id={default_user_id}, context_id={shared_context_id}"
                     )
-                    
+
                     # 定期的に共有context_idをチェックして更新する関数
                     async def update_vad_context():
                         """VADセッションのcontext_idを定期的に更新"""
                         nonlocal shared_context_id
                         last_context_id = shared_context_id
-                        
+
                         while True:
                             await asyncio.sleep(0.5)  # 0.5秒ごとにチェック
                             if shared_context_id and shared_context_id != last_context_id:
@@ -729,7 +771,7 @@ def create_app(config_dir=None):
                                 )
                                 logger.info(f"VADセッションのcontext_idを更新: {shared_context_id}")
                                 last_context_id = shared_context_id
-                    
+
                     # context_id更新タスクを開始
                     context_update_task = asyncio.create_task(update_vad_context())
 
