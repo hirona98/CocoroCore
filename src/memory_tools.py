@@ -1,4 +1,6 @@
 """ChatMemoryサービスと統合するLLMツール"""
+
+import asyncio
 import logging
 from typing import Optional
 
@@ -8,15 +10,22 @@ from session_manager import SessionManager
 logger = logging.getLogger(__name__)
 
 
-def setup_memory_tools(sts, config, memory_client: ChatMemoryClient, session_manager: Optional[SessionManager] = None):
+def setup_memory_tools(
+    sts,
+    config,
+    memory_client: ChatMemoryClient,
+    session_manager: Optional[SessionManager] = None,
+    cocoro_dock_client=None,
+):
     """ChatMemoryとの統合をツールで実現
-    
+
     Args:
         sts: STSPipelineインスタンス
         config: 設定辞書
         memory_client: ChatMemoryClientインスタンス
         session_manager: SessionManagerインスタンス（オプション）
-        
+        cocoro_dock_client: CocoroDockClientインスタンス（オプション）
+
     Returns:
         メモリプロンプトの追加文字列
     """
@@ -111,8 +120,16 @@ def setup_memory_tools(sts, config, memory_client: ChatMemoryClient, session_man
     async def search_memory(query: str, metadata: dict = None):
         """過去の記憶を検索"""
         logger.debug(f"ツール呼び出し: search_memory(query='{query}')")
+
+        # 記憶検索開始のステータス通知
+        if cocoro_dock_client:
+            asyncio.create_task(
+                cocoro_dock_client.send_status_update("記憶検索中", status_type="memory_accessing")
+            )
+
         user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
         result = await memory_client.search(user_id, query)
+
         if result:
             return f"過去の記憶から以下の情報が見つかりました：\n{result}"
         else:
@@ -122,8 +139,16 @@ def setup_memory_tools(sts, config, memory_client: ChatMemoryClient, session_man
     async def add_knowledge(knowledge: str, metadata: dict = None):
         """重要な情報をナレッジとして保存"""
         logger.debug(f"ツール呼び出し: add_knowledge(knowledge='{knowledge}')")
+
+        # 記憶保存開始のステータス通知
+        if cocoro_dock_client:
+            asyncio.create_task(
+                cocoro_dock_client.send_status_update("記憶保存中", status_type="memory_accessing")
+            )
+
         user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
         await memory_client.add_knowledge(user_id, knowledge)
+
         return f"ナレッジを保存しました: {knowledge}"
 
     @sts.llm.tool(forget_memory_spec)

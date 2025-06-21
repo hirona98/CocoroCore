@@ -91,9 +91,19 @@ def create_app(config_dir=None):
     cocoro_dock_client = None
     cocoro_shell_client = None
 
+    # REST APIクライアントの早期初期化（ステータス通知用）
+    if enable_cocoro_dock:
+        from api_clients import CocoroDockClient
+
+        cocoro_dock_client = CocoroDockClient(f"http://localhost:{cocoro_dock_port}")
+        logger.info(f"CocoroDockクライアントを初期化しました: ポート {cocoro_dock_port}")
+
     # セッション管理
     session_manager = SessionManager(timeout_seconds=300, max_sessions=1000)
     timeout_check_task = None
+
+    # 音声とテキストで共有するcontext_id
+    shared_context_id = None
 
     # APIキーの検証
     if not llm_api_key:
@@ -130,7 +140,7 @@ def create_app(config_dir=None):
             logger.info("STT（音声認識）を有効化します: OpenAI Whisper")
             from aiavatar.sts.stt.openai import OpenAISpeechRecognizer
 
-            stt_instance = OpenAISpeechRecognizer(
+            base_stt = OpenAISpeechRecognizer(
                 openai_api_key=stt_api_key,
                 sample_rate=16000,
                 language=stt_language,
@@ -139,12 +149,39 @@ def create_app(config_dir=None):
         else:  # デフォルトはAmiVoice
             logger.info(f"STT（音声認識）を有効化します: AmiVoice (engine={stt_engine})")
 
-            stt_instance = AmiVoiceSpeechRecognizer(
+            base_stt = AmiVoiceSpeechRecognizer(
                 amivoice_api_key=stt_api_key,
                 engine="-a2-ja-general",  # 日本語汎用エンジン
                 sample_rate=16000,
                 debug=debug_mode,
             )
+
+        # STTラッパークラスで音声認識開始時にステータスを送信
+        class STTWithStatus:
+            def __init__(self, base_stt, dock_client):
+                self.base_stt = base_stt
+                self.dock_client = dock_client
+                # 基底クラスの属性を引き継ぐ
+                for attr in dir(base_stt):
+                    if not attr.startswith("_") and attr != "transcribe":
+                        setattr(self, attr, getattr(base_stt, attr))
+
+            async def transcribe(self, data: bytes) -> str:
+                # 音声認識開始のステータス送信
+                if self.dock_client:
+                    asyncio.create_task(
+                        self.dock_client.send_status_update(
+                            "音声認識(API)", status_type="amivoice_sending"
+                        )
+                    )
+                # 実際の音声認識を実行
+                return await self.base_stt.transcribe(data)
+
+            async def close(self):
+                if hasattr(self.base_stt, "close"):
+                    await self.base_stt.close()
+
+        stt_instance = STTWithStatus(base_stt, cocoro_dock_client)
 
         # デバッグモード時のみ音声記録を有効化
         if debug_mode:
@@ -166,12 +203,6 @@ def create_app(config_dir=None):
             sample_rate=16000,
             debug=debug_mode,
         )
-        logger.info("音声アクティビティ検出（VAD）を有効化しました")
-
-        # VADのイベントハンドラーを追加
-        @vad_instance.on_speech_detected
-        async def on_speech_detected(request):
-            logger.debug(f"🔊 音声を検出しました: session_id={request.session_id}")
 
         # ウェイクワードの設定
         if stt_wake_word:
@@ -196,6 +227,34 @@ def create_app(config_dir=None):
         debug=debug_mode,
     )
 
+    # is_awakeメソッドをオーバーライドして、テキストチャットの場合は常にTrueを返す
+    original_is_awake = sts.is_awake
+
+    def custom_is_awake(request, last_request_at):
+        # 共有context_idがある場合は、既に会話が開始されているのでウェイクワード不要
+        if shared_context_id:
+            logger.debug(f"既存の会話コンテキストあり（{shared_context_id}）、ウェイクワード不要")
+            return True
+
+        # audio_dataの有無でテキストチャットか判定
+        # テキストチャットの場合はaudio_dataがNoneまたは存在しない
+        is_text_chat = False
+        if hasattr(request, "audio_data"):
+            if request.audio_data is None:
+                is_text_chat = True
+        else:
+            # audio_data属性自体がない場合もテキストチャット
+            is_text_chat = True
+
+        if is_text_chat:
+            logger.debug("テキストチャットのため、ウェイクワード検出済みとして処理")
+            return True
+
+        # それ以外（音声入力）は元の処理を実行
+        return original_is_awake(request, last_request_at)
+
+    sts.is_awake = custom_is_awake
+
     # on_before_llmフック（音声認識の有無に関わらず統一）
     @sts.on_before_llm
     async def handle_before_llm(request):
@@ -203,23 +262,49 @@ def create_app(config_dir=None):
         logger.debug(f"[on_before_llm] request.text: '{request.text}'")
         logger.debug(f"[on_before_llm] request.session_id: {request.session_id}")
         logger.debug(f"[on_before_llm] request.user_id: {request.user_id}")
+        logger.debug(
+            f"[on_before_llm] has audio_data: {hasattr(request, 'audio_data')} (is None: {getattr(request, 'audio_data', None) is None})"
+        )
 
         # 音声認識結果のCocoroDockへの送信とログ出力
-        if is_use_stt and stt_instance and request.text:
-            logger.info(
-                f"🎤 音声認識結果: '{request.text}' (session_id: {request.session_id}, user_id: {request.user_id})"
-            )
+        if request.text:
+            # テキストチャットか音声認識かを判定
+            # audio_dataの有無で判定（音声認識の場合はaudio_dataがある）
+            is_text_chat = False
+            if hasattr(request, "audio_data"):
+                # audio_dataがNoneまたは存在しない場合はテキストチャット
+                if request.audio_data is None:
+                    is_text_chat = True
+            else:
+                # audio_data属性自体がない場合もテキストチャット
+                is_text_chat = True
 
-            # 音声認識したテキストをCocoroDockに送信（非同期）
-            if cocoro_dock_client:
-                asyncio.create_task(
-                    cocoro_dock_client.send_chat_message(role="user", content=request.text)
+            if is_text_chat:
+                logger.info(
+                    f"💬 テキストチャット受信: '{request.text}' (session_id: {request.session_id}, user_id: {request.user_id})"
                 )
-                logger.debug(f"音声認識テキストをCocoroDockに送信: '{request.text}'")
+            else:
+                # 音声認識の場合
+                logger.info(
+                    f"🎤 音声認識結果: '{request.text}' (session_id: {request.session_id}, user_id: {request.user_id})"
+                )
+                # 音声認識したテキストをCocoroDockに送信（非同期）
+                if cocoro_dock_client:
+                    asyncio.create_task(
+                        cocoro_dock_client.send_chat_message(role="user", content=request.text)
+                    )
+                    logger.debug(f"音声認識テキストをCocoroDockに送信: '{request.text}'")
 
             if wakewords:
                 for wakeword in wakewords:
                     if wakeword.lower() in request.text.lower():
+                        # ウェイクワード検出ステータス送信（非同期）
+                        if cocoro_dock_client:
+                            asyncio.create_task(
+                                cocoro_dock_client.send_status_update(
+                                    "ウェイクワード検出", status_type="voice_detected"
+                                )
+                            )
                         logger.info(f"✨ ウェイクワード検出: '{wakeword}' in '{request.text}'")
 
         # 通知タグの処理（変換は行わず、ログを出力するのみ）
@@ -236,23 +321,27 @@ def create_app(config_dir=None):
                 except Exception as e:
                     logger.error(f"通知の解析エラー: {e}")
 
+        # LLM送信開始のステータス通知（ただし、テキストがある場合のみ）
+        if cocoro_dock_client and request.text:
+            asyncio.create_task(
+                cocoro_dock_client.send_status_update("LLM処理中(API)", status_type="llm_sending")
+            )
+
     # ChatMemoryの設定
     if memory_enabled:
         logger.info(f"ChatMemoryを有効化します: {memory_url}")
         memory_client = ChatMemoryClient(memory_url)
 
         # メモリツールをセットアップ
-        memory_prompt_addition = setup_memory_tools(sts, config, memory_client)
+        memory_prompt_addition = setup_memory_tools(
+            sts, config, memory_client, session_manager, cocoro_dock_client
+        )
 
         # システムプロンプトにメモリ機能の説明を追加（初回のみ）
         if memory_prompt_addition and memory_prompt_addition not in llm.system_prompt:
             llm.system_prompt = llm.system_prompt + memory_prompt_addition
 
     # REST APIクライアントの初期化
-    if enable_cocoro_dock:
-        cocoro_dock_client = CocoroDockClient(f"http://localhost:{cocoro_dock_port}")
-        logger.info(f"CocoroDockクライアントを初期化しました: ポート {cocoro_dock_port}")
-
     if enable_cocoro_shell:
         cocoro_shell_client = CocoroShellClient(f"http://localhost:{cocoro_shell_port}")
         logger.info(f"CocoroShellクライアントを初期化しました: ポート {cocoro_shell_port}")
@@ -261,6 +350,13 @@ def create_app(config_dir=None):
     @sts.on_finish
     async def on_response_complete(request, response):
         """AI応答完了時の処理"""
+        nonlocal shared_context_id
+
+        # context_idを保存（音声・テキスト共通で使用）
+        if response.context_id:
+            shared_context_id = response.context_id
+            logger.debug(f"共有context_idを更新: {shared_context_id}")
+
         # セッションアクティビティを更新（これは待つ必要がある）
         await session_manager.update_activity(request.user_id or "default_user", request.session_id)
 
@@ -362,6 +458,27 @@ def create_app(config_dir=None):
     router = aiavatar_app.get_api_router()
     app.include_router(router)
 
+    # カスタムchatエンドポイントを追加（共有context_id処理用）
+    @app.post("/api/chat")
+    async def custom_chat(request: dict):
+        """カスタムchatエンドポイント - 共有context_idを処理"""
+        nonlocal shared_context_id
+
+        # 共有context_idがある場合は使用
+        if shared_context_id and not request.get("context_id"):
+            request["context_id"] = shared_context_id
+            logger.info(f"テキストチャットで共有context_idを使用: {shared_context_id}")
+
+        # 元のchatエンドポイントを呼び出し（AIAvatarのルーター経由）
+        response = await aiavatar_app.chat(request)
+
+        # 新しいcontext_idが生成された場合は保存
+        if hasattr(response, "context_id") and response.context_id:
+            shared_context_id = response.context_id
+            logger.debug(f"新しい共有context_idを保存: {shared_context_id}")
+
+        return response
+
     # ヘルスチェックエンドポイント（管理用）
     @app.get("/health")
     async def health_check():
@@ -393,10 +510,21 @@ def create_app(config_dir=None):
 
         if memory_client:
             nonlocal timeout_check_task
+            nonlocal shared_context_id
+
             # SessionManagerとChatMemoryClientでタイムアウトチェッカーを開始
-            timeout_check_task = asyncio.create_task(
-                create_timeout_checker(session_manager, memory_client)
-            )
+            async def timeout_checker_with_context_clear():
+                """タイムアウトチェッカーにcontext_idクリア機能を追加"""
+                async for _ in create_timeout_checker(session_manager, memory_client):
+                    # セッションタイムアウト時に共有context_idもクリア
+                    active_sessions = await session_manager.get_all_sessions()
+                    if not active_sessions and shared_context_id:
+                        logger.info(
+                            f"全セッションタイムアウトにより共有context_idをクリア: {shared_context_id}"
+                        )
+                        shared_context_id = None
+
+            timeout_check_task = asyncio.create_task(timeout_checker_with_context_clear())
             logger.info("セッションタイムアウトチェックタスクを開始しました")
 
         # マイク入力の開始（STTが有効な場合）
@@ -406,6 +534,13 @@ def create_app(config_dir=None):
                 """マイクからの音声入力を処理する"""
                 try:
                     logger.info("マイク入力を開始します")
+
+                    # 音声入力待ち状態の通知
+                    if cocoro_dock_client:
+                        await cocoro_dock_client.send_status_update(
+                            "音声入力待ち", status_type="voice_waiting"
+                        )
+
                     audio_device = AudioDevice()
                     logger.info(f"使用するマイクデバイス: {audio_device.input_device}")
 
@@ -425,9 +560,12 @@ def create_app(config_dir=None):
                     vad_instance.set_session_data(
                         default_session_id, "user_id", default_user_id, create_session=True
                     )
-                    vad_instance.set_session_data(default_session_id, "context_id", None)
+                    # 共有context_idがある場合は使用
+                    vad_instance.set_session_data(
+                        default_session_id, "context_id", shared_context_id
+                    )
                     logger.info(
-                        f"VADセッション設定完了: session_id={default_session_id}, user_id={default_user_id}"
+                        f"VADセッション設定完了: session_id={default_session_id}, user_id={default_user_id}, context_id={shared_context_id}"
                     )
 
                     # マイクストリームを処理

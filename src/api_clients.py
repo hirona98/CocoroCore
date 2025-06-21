@@ -111,6 +111,36 @@ class CocoroDockClient:
             logger.error(f"制御コマンドエラー: {e}")
             return False
 
+    async def send_status_update(self, message: str, status_type: Optional[str] = None) -> bool:
+        """
+        ステータス更新をCocoroDockに送信
+
+        Args:
+            message: ステータスメッセージ
+            status_type: ステータスタイプ（"voice_waiting", "amivoice_sending", "llm_sending", "memory_accessing"など）
+
+        Returns:
+            成功時True、失敗時False
+        """
+        payload = {
+            "message": message,
+            "timestamp": datetime.now().isoformat()
+        }
+        if status_type:
+            payload["type"] = status_type
+
+        try:
+            response = await self.client.post(f"{self.base_url}/api/status", json=payload)
+            response.raise_for_status()
+            logger.debug(f"ステータス更新送信成功: {message}")
+            return True
+        except httpx.ConnectError:
+            logger.debug("CocoroDock未起動。ステータス更新をスキップします。")
+            return False
+        except Exception as e:
+            logger.debug(f"ステータス更新エラー（正常動作）: {e}")
+            return False
+
     async def close(self):
         """クライアントを閉じる"""
         await self.client.aclose()
