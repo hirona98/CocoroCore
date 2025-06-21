@@ -142,7 +142,9 @@ def create_app(config_dir=None):
                 logger.debug(f"LLMストリームレスポンスで共有context_idを使用: {context_id}")
             
             # 基底クラスのget_response_streamを呼び出し
-            async for chunk in self.base_llm.get_response_stream(messages, context_id=context_id, **kwargs):
+            async for chunk in self.base_llm.get_response_stream(
+                messages, context_id=context_id, **kwargs
+            ):
                 yield chunk
     
     # ラッパーを使用
@@ -273,7 +275,7 @@ def create_app(config_dir=None):
     )
     
     # process_requestメソッドをオーバーライドして、音声入力時のcontext_id処理を追加
-    if hasattr(sts, 'process_request'):
+    if hasattr(sts, "process_request"):
         original_process_request = sts.process_request
         
         async def custom_process_request(request):
@@ -283,17 +285,21 @@ def create_app(config_dir=None):
             # 音声入力かつ共有context_idがある場合
             if shared_context_id:
                 # SimpleNamespaceオブジェクトの場合
-                if hasattr(request, '__dict__'):
-                    if hasattr(request, 'audio_data') and request.audio_data is not None:
-                        if not getattr(request, 'context_id', None):
+                if hasattr(request, "__dict__"):
+                    if hasattr(request, "audio_data") and request.audio_data is not None:
+                        if not getattr(request, "context_id", None):
                             request.context_id = shared_context_id
-                            logger.info(f"音声入力リクエストに共有context_idを設定: {shared_context_id}")
+                            logger.info(
+                                f"音声入力リクエストに共有context_idを設定: {shared_context_id}"
+                            )
                 # 辞書型の場合
                 elif isinstance(request, dict):
-                    if request.get('audio_data') is not None:
-                        if not request.get('context_id'):
-                            request['context_id'] = shared_context_id
-                            logger.info(f"音声入力リクエスト(dict)に共有context_idを設定: {shared_context_id}")
+                    if request.get("audio_data") is not None:
+                        if not request.get("context_id"):
+                            request["context_id"] = shared_context_id
+                            logger.info(
+                                f"音声入力リクエスト(dict)に共有context_idを設定: {shared_context_id}"
+                            )
             
             # 元のメソッドを呼び出し
             return await original_process_request(request)
@@ -339,9 +345,9 @@ def create_app(config_dir=None):
         # 音声入力でcontext_idが未設定の場合、共有context_idを設定
         if shared_context_id:
             # テキストチャットか音声入力かを判定
-            is_voice_input = hasattr(request, 'audio_data') and request.audio_data is not None
+            is_voice_input = hasattr(request, "audio_data") and request.audio_data is not None
             
-            if is_voice_input and not getattr(request, 'context_id', None):
+            if is_voice_input and not getattr(request, "context_id", None):
                 # requestオブジェクトが読み取り専用の場合があるため、
                 # 新しい属性として設定を試みる
                 try:
@@ -349,9 +355,11 @@ def create_app(config_dir=None):
                     logger.info(f"音声入力に共有context_idを設定: {shared_context_id}")
                 except AttributeError:
                     # 読み取り専用の場合は、別の方法で設定
-                    logger.warning(f"requestオブジェクトは読み取り専用です。context_id: {shared_context_id}を別の方法で設定します")
+                    logger.warning(
+                        f"requestオブジェクトは読み取り専用です。context_id: {shared_context_id}を別の方法で設定します"
+                    )
                     # STSパイプラインにcontext_idを直接設定する試み
-                    if hasattr(sts, 'context_id'):
+                    if hasattr(sts, "context_id"):
                         sts.context_id = shared_context_id
                         logger.info(f"STSパイプラインにcontext_idを直接設定: {shared_context_id}")
         
@@ -359,7 +367,9 @@ def create_app(config_dir=None):
         logger.debug(f"[on_before_llm] request.text: '{request.text}'")
         logger.debug(f"[on_before_llm] request.session_id: {request.session_id}")
         logger.debug(f"[on_before_llm] request.user_id: {request.user_id}")
-        logger.debug(f"[on_before_llm] request.context_id: {getattr(request, 'context_id', 'なし')}")
+        logger.debug(
+            f"[on_before_llm] request.context_id: {getattr(request, 'context_id', 'なし')}"
+        )
         logger.debug(f"[on_before_llm] request.metadata: {getattr(request, 'metadata', {})}")
         logger.debug(
             f"[on_before_llm] has audio_data: {hasattr(request, 'audio_data')} (is None: {getattr(request, 'audio_data', None) is None})"
@@ -457,12 +467,12 @@ def create_app(config_dir=None):
             logger.debug(f"共有context_idを更新: {shared_context_id}")
             
             # VADの全セッションに共有context_idを設定
-            if vad_instance and hasattr(vad_instance, 'sessions'):
+            if vad_instance and hasattr(vad_instance, "sessions"):
                 for session_id in list(vad_instance.sessions.keys()):
-                    vad_instance.set_session_data(
-                        session_id, "context_id", shared_context_id
+                    vad_instance.set_session_data(session_id, "context_id", shared_context_id)
+                    logger.debug(
+                        f"VADセッション {session_id} にcontext_idを設定: {shared_context_id}"
                     )
-                    logger.debug(f"VADセッション {session_id} にcontext_idを設定: {shared_context_id}")
 
         # セッションアクティビティを更新（これは待つ必要がある）
         await session_manager.update_activity(request.user_id or "default_user", request.session_id)
@@ -567,9 +577,9 @@ def create_app(config_dir=None):
         nonlocal shared_context_id
         
         # テキストリクエストで共有context_idがある場合
-        if shared_context_id and hasattr(request, 'text') and request.text:
+        if shared_context_id and hasattr(request, "text") and request.text:
             # context_idが未設定の場合は共有context_idを設定
-            if not getattr(request, 'context_id', None):
+            if not getattr(request, "context_id", None):
                 request.context_id = shared_context_id
                 logger.info(f"STSリクエストに共有context_idを設定: {shared_context_id}")
         
@@ -586,7 +596,7 @@ def create_app(config_dir=None):
     app.include_router(router)
 
     # STSパイプラインの_process_text_requestメソッドをオーバーライド
-    if hasattr(sts, '_process_text_request'):
+    if hasattr(sts, "_process_text_request"):
         original_process_text_request = sts._process_text_request
         
         async def custom_process_text_request(request):
@@ -594,13 +604,15 @@ def create_app(config_dir=None):
             nonlocal shared_context_id
             
             # 共有context_idがあり、リクエストにcontext_idがない場合は設定
-            if shared_context_id and not getattr(request, 'context_id', None):
-                if hasattr(request, '__dict__'):
+            if shared_context_id and not getattr(request, "context_id", None):
+                if hasattr(request, "__dict__"):
                     request.context_id = shared_context_id
                     logger.info(f"テキストリクエストに共有context_idを設定: {shared_context_id}")
-                elif isinstance(request, dict) and not request.get('context_id'):
-                    request['context_id'] = shared_context_id
-                    logger.info(f"テキストリクエスト(dict)に共有context_idを設定: {shared_context_id}")
+                elif isinstance(request, dict) and not request.get("context_id"):
+                    request["context_id"] = shared_context_id
+                    logger.info(
+                        f"テキストリクエスト(dict)に共有context_idを設定: {shared_context_id}"
+                    )
             
             # 元のメソッドを呼び出し
             return await original_process_text_request(request)
