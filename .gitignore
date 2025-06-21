@@ -8,6 +8,9 @@ performance.db
 .github/
 CLAUDE.md
 
+# PyInstaller
+*.spec
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
