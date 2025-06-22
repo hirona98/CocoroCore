@@ -675,12 +675,32 @@ def create_app(config_dir=None):
             "active_sessions": session_manager.get_active_session_count(),
         }
 
-    # グレースフルシャットダウンエンドポイント
-    @app.post("/shutdown")
-    async def shutdown(grace_period_seconds: int = 30):
-        """グレースフルシャットダウン"""
-        shutdown_handler.request_shutdown(grace_period_seconds)
-        return {"status": "shutdown_requested", "grace_period_seconds": grace_period_seconds}
+    # 制御コマンドエンドポイント
+    @app.post("/api/control")
+    async def control(request: dict):
+        """制御コマンドを実行"""
+        command = request.get("command")
+        params = request.get("params", {})
+        reason = request.get("reason")
+
+        if command == "shutdown":
+            # シャットダウン処理
+            grace_period = params.get("grace_period_seconds", 30)
+            logger.info(
+                f"制御コマンドによるシャットダウン要求: 理由={reason}, 猶予期間={grace_period}秒"
+            )
+            shutdown_handler.request_shutdown(grace_period)
+            return {
+                "status": "success",
+                "message": "Shutdown requested",
+                "timestamp": datetime.now().isoformat(),
+            }
+        else:
+            return {
+                "status": "error",
+                "message": f"Unknown command: {command}",
+                "timestamp": datetime.now().isoformat(),
+            }
 
     # マイク入力タスクの管理
     mic_input_task = None
