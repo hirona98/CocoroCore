@@ -49,7 +49,6 @@ The following packages are licensed under the MIT License:
 - litellm (Copyright (c) 2023 Berri AI)
 - PyAudio
 - PyYAML
-- aiavatar
 - jiter
 - python-dotenv
 - regex
@@ -144,6 +143,7 @@ Apache License 2.0
 
 The following packages are licensed under the Apache License, Version 2.0:
 
+- aiavatar
 - aiofiles
 - openai
 - requests
