@@ -5,3 +5,4 @@ uvicorn
 httpx
 sse_starlette
 litellm
+Pillow
