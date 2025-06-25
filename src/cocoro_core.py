@@ -28,6 +28,18 @@ from memory_tools import setup_memory_tools
 from session_manager import SessionManager, create_timeout_checker
 from shutdown_handler import shutdown_handler
 
+# Ollama画像サポートパッチを適用
+try:
+    import sys
+
+    patches_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "patches")
+    sys.path.insert(0, patches_dir)
+    from ollama_chat_image_patch import patch_ollama_chat_transform
+
+    patch_ollama_chat_transform()
+except Exception as e:
+    logging.warning(f"Ollama画像サポートパッチの適用をスキップ: {e}")
+
 # ログ設定
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
