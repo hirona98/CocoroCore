@@ -16,13 +16,13 @@ logger = logging.getLogger(__name__)
 class CocoroDockClient:
     """CocoroDock との通信を管理するクライアント"""
 
-    def __init__(self, base_url: str = "http://localhost:55600", timeout: float = 30.0):
+    def __init__(self, base_url: str = "http://127.0.0.1:55600", timeout: float = 30.0):
         self.base_url = base_url.rstrip("/")
         # HTTPクライアントの設定を最適化
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=3.0),  # 非同期化したので長めでOK
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
-            http2=False  # ローカル接続なのでHTTP/1.1で十分
+            http2=False,  # ローカル接続なのでHTTP/1.1で十分
         )
 
     async def send_chat_message(self, role: str, content: str) -> bool:
@@ -122,10 +122,7 @@ class CocoroDockClient:
         Returns:
             成功時True、失敗時False
         """
-        payload = {
-            "message": message,
-            "timestamp": datetime.now().isoformat()
-        }
+        payload = {"message": message, "timestamp": datetime.now().isoformat()}
         if status_type:
             payload["type"] = status_type
 
@@ -149,13 +146,13 @@ class CocoroDockClient:
 class CocoroShellClient:
     """CocoroShell との通信を管理するクライアント"""
 
-    def __init__(self, base_url: str = "http://localhost:55605", timeout: float = 30.0):
+    def __init__(self, base_url: str = "http://127.0.0.1:55605", timeout: float = 30.0):
         self.base_url = base_url.rstrip("/")
         # HTTPクライアントの設定を最適化
         self.client = httpx.AsyncClient(
             timeout=httpx.Timeout(10.0, connect=3.0),  # 非同期化したので長めでOK
             limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
-            http2=False  # ローカル接続なのでHTTP/1.1で十分
+            http2=False,  # ローカル接続なのでHTTP/1.1で十分
         )
 
     async def send_chat_for_speech(

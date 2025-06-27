@@ -1,8 +1,9 @@
 """CocoroCore動作テストスクリプト"""
 import asyncio
 import json
-import httpx
 import sys
+
+import httpx
 
 
 async def test_health_check():
@@ -10,7 +11,7 @@ async def test_health_check():
     print("\n[TEST] ヘルスチェック")
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get("http://localhost:55601/health")
+            response = await client.get("http://127.0.0.1:55601/health")
             response.raise_for_status()
             data = response.json()
             print(f"✓ ステータス: {data.get('status')}")
@@ -37,7 +38,7 @@ async def test_chat_simple():
             # SSEレスポンスを処理
             async with client.stream(
                 "POST",
-                "http://localhost:55601/chat",
+                "http://127.0.0.1:55601/chat",
                 json=request_data
             ) as response:
                 response.raise_for_status()
@@ -80,7 +81,7 @@ async def test_chat_with_notification():
             
             async with client.stream(
                 "POST",
-                "http://localhost:55601/chat",
+                "http://127.0.0.1:55601/chat",
                 json=request_data
             ) as response:
                 response.raise_for_status()
@@ -124,7 +125,7 @@ async def test_memory_tool():
             print("  記憶を追加中...")
             async with client.stream(
                 "POST",
-                "http://localhost:55601/chat",
+                "http://127.0.0.1:55601/chat",
                 json=request_data
             ) as response:
                 response.raise_for_status()
@@ -144,7 +145,7 @@ async def test_memory_tool():
             print("  記憶を検索中...")
             async with client.stream(
                 "POST",
-                "http://localhost:55601/chat",
+                "http://127.0.0.1:55601/chat",
                 json=request_data
             ) as response:
                 response.raise_for_status()
@@ -177,8 +178,8 @@ async def test_api_key_auth():
     print("\n[TEST] APIキー認証（外部アクセス）")
     async with httpx.AsyncClient() as client:
         try:
-            # ヘッダーなしでアクセス（localhostなので成功するはず）
-            response = await client.get("http://localhost:55601/health")
+            # ヘッダーなしでアクセス（127.0.0.1なので成功するはず）
+            response = await client.get("http://127.0.0.1:55601/health")
             if response.status_code == 200:
                 print("✓ ローカルホストからのアクセスは認証不要")
                 return True
@@ -225,4 +226,4 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(main())    asyncio.run(main())

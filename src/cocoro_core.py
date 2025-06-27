@@ -32,7 +32,9 @@ from shutdown_handler import shutdown_handler
 try:
     import sys
 
-    patches_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "patches")
+    patches_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "patches"
+    )
     sys.path.insert(0, patches_dir)
     from ollama_chat_image_patch import patch_ollama_chat_transform
 
@@ -90,7 +92,7 @@ def create_app(config_dir=None):
     # ChatMemory設定
     memory_enabled = current_char.get("isEnableMemory", False)
     memory_port = config.get("cocoroMemoryPort", 55602)
-    memory_url = f"http://localhost:{memory_port}"
+    memory_url = f"http://127.0.0.1:{memory_port}"
     memory_client = None
     memory_prompt_addition = ""
 
@@ -107,7 +109,7 @@ def create_app(config_dir=None):
     if enable_cocoro_dock:
         from api_clients import CocoroDockClient
 
-        cocoro_dock_client = CocoroDockClient(f"http://localhost:{cocoro_dock_port}")
+        cocoro_dock_client = CocoroDockClient(f"http://127.0.0.1:{cocoro_dock_port}")
         logger.info(f"CocoroDockクライアントを初期化しました: ポート {cocoro_dock_port}")
 
     # セッション管理
@@ -475,7 +477,7 @@ def create_app(config_dir=None):
 
     # REST APIクライアントの初期化
     if enable_cocoro_shell:
-        cocoro_shell_client = CocoroShellClient(f"http://localhost:{cocoro_shell_port}")
+        cocoro_shell_client = CocoroShellClient(f"http://127.0.0.1:{cocoro_shell_port}")
         logger.info(f"CocoroShellクライアントを初期化しました: ポート {cocoro_shell_port}")
 
     # 応答送信処理
