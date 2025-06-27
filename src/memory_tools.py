@@ -155,6 +155,13 @@ def setup_memory_tools(
     async def forget_memory(topic: str, metadata: dict = None):
         """特定の事柄に関する記憶を削除"""
         logger.debug(f"ツール呼び出し: forget_memory(topic='{topic}')")
+
+        # 記憶削除開始のステータス通知
+        if cocoro_dock_client:
+            asyncio.create_task(
+                cocoro_dock_client.send_status_update("記憶削除中", status_type="memory_accessing")
+            )
+
         user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
         session_id = metadata.get("session_id") if metadata else None
 
@@ -196,6 +203,13 @@ def setup_memory_tools(
     async def delete_current_session(metadata: dict = None):
         """現在のセッションの履歴と要約を削除"""
         logger.debug("ツール呼び出し: delete_current_session()")
+
+        # セッション削除開始のステータス通知
+        if cocoro_dock_client:
+            asyncio.create_task(
+                cocoro_dock_client.send_status_update("履歴削除中", status_type="memory_accessing")
+            )
+
         user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
         session_id = metadata.get("session_id") if metadata else None
 
