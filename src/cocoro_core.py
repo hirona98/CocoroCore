@@ -119,6 +119,46 @@ def create_app(config_dir=None):
     # 音声とテキストで共有するcontext_id
     shared_context_id = None
 
+    # LLM処理状況を管理するクラス
+    class LLMStatusManager:
+        def __init__(self, dock_client):
+            self.dock_client = dock_client
+            self.active_requests = {}  # request_id: asyncio.Task のマッピング
+
+        async def start_periodic_status(self, request_id: str):
+            """定期的なステータス送信を開始"""
+
+            async def send_periodic_status():
+                counter = 0
+                try:
+                    while True:
+                        await asyncio.sleep(1.0)
+                        counter += 1
+                        if self.dock_client:
+                            await self.dock_client.send_status_update(
+                                "LLM応答待ち", status_type="llm_processing"
+                            )
+                            logger.debug(f"LLM処理ステータス送信: {counter}秒")
+                except asyncio.CancelledError:
+                    logger.debug(f"LLM処理ステータス送信を終了: request_id={request_id}")
+                    raise
+
+            # タスクを作成して保存
+            task = asyncio.create_task(send_periodic_status())
+            self.active_requests[request_id] = task
+            logger.debug(f"LLM処理ステータス送信を開始: request_id={request_id}")
+
+        def stop_periodic_status(self, request_id: str):
+            """定期的なステータス送信を停止"""
+            if request_id in self.active_requests:
+                task = self.active_requests[request_id]
+                task.cancel()
+                del self.active_requests[request_id]
+                logger.debug(f"LLM処理ステータス送信タスクをキャンセル: request_id={request_id}")
+
+    # LLMステータスマネージャーの初期化
+    llm_status_manager = LLMStatusManager(cocoro_dock_client)
+
     # APIキーの検証
     if not llm_api_key:
         raise ValueError("APIキーが設定されていません。設定ファイルを確認してください。")
@@ -455,11 +495,18 @@ def create_app(config_dir=None):
         if request.text and "<cocoro-desktop-monitoring>" in request.text:
             logger.info("デスクトップモニタリング画像タグを検出（独り言モード）")
 
-        # LLM送信開始のステータス通知（ただし、テキストがある場合のみ）
+        # LLM送信開始のステータス通知と定期ステータス送信の開始
         if cocoro_dock_client and request.text:
+            # 初回のステータス通知
             asyncio.create_task(
-                cocoro_dock_client.send_status_update("LLM処理中(API)", status_type="llm_sending")
+                cocoro_dock_client.send_status_update("LLM API呼び出し", status_type="llm_sending")
             )
+
+            # 定期ステータス送信を開始
+            request_id = (
+                f"{request.session_id}_{request.user_id}_{request.context_id or 'no_context'}"
+            )
+            await llm_status_manager.start_periodic_status(request_id)
 
     # ChatMemoryの設定
     if memory_enabled:
@@ -485,6 +532,10 @@ def create_app(config_dir=None):
     async def on_response_complete(request, response):
         """AI応答完了時の処理"""
         nonlocal shared_context_id
+
+        # 定期ステータス送信を停止
+        request_id = f"{request.session_id}_{request.user_id}_{request.context_id or 'no_context'}"
+        llm_status_manager.stop_periodic_status(request_id)
 
         # context_idを保存（音声・テキスト共通で使用）
         if response.context_id:
@@ -859,6 +910,11 @@ def create_app(config_dir=None):
                     logger.error(f"シャットダウン時の要約生成エラー: {e}")
 
             await memory_client.close()
+
+        # 残っているLLMステータス送信タスクをすべてキャンセル
+        for request_id, task in list(llm_status_manager.active_requests.items()):
+            llm_status_manager.stop_periodic_status(request_id)
+        logger.info("すべてのLLMステータス送信タスクを停止しました")
 
         # REST APIクライアントのクリーンアップ
         if cocoro_dock_client:
