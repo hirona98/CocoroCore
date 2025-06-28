@@ -221,17 +221,17 @@ def create_app(config_dir=None):
     stt_api_key = current_char.get("sttApiKey", "")
     stt_language = current_char.get("sttLanguage", "ja")  # OpenAI用の言語設定
 
-    # STTインスタンスの初期化
+    # STTインスタンスの初期化（APIキーがあれば常に作成）
     stt_instance = None
     voice_recorder_instance = None
     voice_recorder_enabled = False
     wakewords = None
     vad_instance = None
 
-    if is_use_stt and stt_api_key:
-        # 音声認識エンジンの選択
+    if stt_api_key:
+        # 音声認識エンジンの選択（APIキーがあれば常に作成）
         if stt_engine == "openai":
-            logger.info("STT（音声認識）を有効化します: OpenAI Whisper")
+            logger.info("STTインスタンスを作成します: OpenAI Whisper")
             from aiavatar.sts.stt.openai import OpenAISpeechRecognizer
 
             base_stt = OpenAISpeechRecognizer(
@@ -241,7 +241,7 @@ def create_app(config_dir=None):
                 debug=debug_mode,
             )
         else:  # デフォルトはAmiVoice
-            logger.info(f"STT（音声認識）を有効化します: AmiVoice (engine={stt_engine})")
+            logger.info(f"STTインスタンスを作成します: AmiVoice (engine={stt_engine})")
 
             base_stt = AmiVoiceSpeechRecognizer(
                 amivoice_api_key=stt_api_key,
@@ -290,7 +290,7 @@ def create_app(config_dir=None):
             voice_recorder_enabled = False
             voice_recorder_instance = DummyVoiceRecorder()
 
-        # VAD（音声アクティビティ検出）の設定
+        # VAD（音声アクティビティ検出）の設定（常に作成）
         # カスタムVADクラスで共有context_idを管理
         class VADWithSharedContext(StandardSpeechDetector):
             def get_session_data(self, session_id, key):
@@ -316,10 +316,15 @@ def create_app(config_dir=None):
         if stt_wake_word:
             wakewords = [stt_wake_word]
             logger.info(f"ウェイクワードを設定: {stt_wake_word}")
+
+        # is_use_sttの状態をログ出力
+        if is_use_stt:
+            logger.info("STT機能は有効状態で初期化されました")
+        else:
+            logger.info("STT機能は無効状態で初期化されました（APIで動的に有効化可能）")
     else:
         voice_recorder_instance = DummyVoiceRecorder()
-        if is_use_stt and not stt_api_key:
-            logger.warning("STTが有効になっていますが、APIキーが設定されていません")
+        logger.warning("STT APIキーが設定されていないため、STT機能は利用できません")
 
     # STSパイプラインを初期化
     sts = STSPipeline(
@@ -797,7 +802,7 @@ def create_app(config_dir=None):
                     else:
                         return {
                             "status": "error",
-                            "message": "STT API key is not configured",
+                            "message": "STT instances are not available (API key or VAD missing)",
                             "timestamp": datetime.now().isoformat(),
                         }
                 else:
@@ -942,9 +947,12 @@ def create_app(config_dir=None):
             timeout_check_task = asyncio.create_task(timeout_checker_with_context_clear())
             logger.info("セッションタイムアウトチェックタスクを開始しました")
 
-        # マイク入力の開始（STTが有効な場合）
+        # マイク入力の開始（STTが有効かつインスタンスが作成されている場合）
         if is_use_stt and stt_api_key and vad_instance:
             mic_input_task = asyncio.create_task(process_mic_input())
+            logger.info("起動時にSTTが有効のため、マイク入力を開始しました")
+        elif stt_api_key and vad_instance:
+            logger.info("STTインスタンスは準備済み、APIコマンドで有効化可能です")
 
     @app.on_event("shutdown")
     async def cleanup():
