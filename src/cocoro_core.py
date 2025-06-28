@@ -771,6 +771,61 @@ def create_app(config_dir=None):
                 "message": "Shutdown requested",
                 "timestamp": datetime.now().isoformat(),
             }
+        elif command == "sttControl":
+            # STT（音声認識）制御
+            enabled = params.get("enabled", True)
+            logger.info(f"STT制御コマンド: enabled={enabled}")
+
+            # nonlocalで外部スコープの変数を参照
+            nonlocal is_use_stt, mic_input_task
+
+            # is_use_sttフラグを更新
+            is_use_stt = enabled
+
+            # マイク入力タスクの制御
+            if enabled:
+                # STTを有効化
+                if not mic_input_task or mic_input_task.done():
+                    # APIキーが設定されている場合のみ開始
+                    if stt_api_key and vad_instance:
+                        mic_input_task = asyncio.create_task(process_mic_input())
+                        return {
+                            "status": "success",
+                            "message": "STT enabled",
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                    else:
+                        return {
+                            "status": "error",
+                            "message": "STT API key is not configured",
+                            "timestamp": datetime.now().isoformat(),
+                        }
+                else:
+                    return {
+                        "status": "success",
+                        "message": "STT is already enabled",
+                        "timestamp": datetime.now().isoformat(),
+                    }
+            else:
+                # STTを無効化
+                if mic_input_task and not mic_input_task.done():
+                    logger.info("マイク入力タスクを停止します")
+                    mic_input_task.cancel()
+                    try:
+                        await mic_input_task
+                    except asyncio.CancelledError:
+                        pass
+                    return {
+                        "status": "success",
+                        "message": "STT disabled",
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                else:
+                    return {
+                        "status": "success",
+                        "message": "STT is already disabled",
+                        "timestamp": datetime.now().isoformat(),
+                    }
         else:
             return {
                 "status": "error",
@@ -780,6 +835,85 @@ def create_app(config_dir=None):
 
     # マイク入力タスクの管理
     mic_input_task = None
+
+    # 共通のVADコンテキスト更新関数
+    def create_vad_context_updater(session_id: str):
+        """VADセッションのcontext_idを定期的に更新する関数を作成"""
+
+        async def update_vad_context():
+            """VADセッションのcontext_idを定期的に更新"""
+            nonlocal shared_context_id
+            last_context_id = shared_context_id
+
+            while True:
+                await asyncio.sleep(0.5)  # 0.5秒ごとにチェック
+                if shared_context_id and shared_context_id != last_context_id:
+                    # 共有context_idが更新されたらVADセッションも更新
+                    vad_instance.set_session_data(session_id, "context_id", shared_context_id)
+                    logger.info(
+                        f"VADセッション {session_id} のcontext_idを更新: {shared_context_id}"
+                    )
+                    last_context_id = shared_context_id
+
+        return update_vad_context
+
+    # 共通のマイク入力処理関数
+    async def process_mic_input():
+        """マイクからの音声入力を処理する共通関数"""
+        try:
+            logger.info("マイク入力を開始します")
+
+            # 音声入力待ち状態の通知
+            if cocoro_dock_client:
+                await cocoro_dock_client.send_status_update(
+                    "音声入力待ち", status_type="voice_waiting"
+                )
+
+            audio_device = AudioDevice()
+            logger.info(f"使用するマイクデバイス: {audio_device.input_device}")
+
+            audio_recorder = AudioRecorder(
+                sample_rate=16000,
+                device_index=audio_device.input_device,
+                channels=1,
+                chunk_size=512,
+            )
+            logger.info("AudioRecorderを初期化しました")
+
+            # デフォルトユーザーIDとセッションIDを設定
+            default_user_id = "voice_user"
+            # セッションIDの重複を防ぐためにマイクロ秒を追加
+            default_session_id = f"voice_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+
+            # VADにユーザーIDとコンテキストIDを設定
+            vad_instance.set_session_data(
+                default_session_id, "user_id", default_user_id, create_session=True
+            )
+            # 共有context_idがある場合は使用
+            if shared_context_id:
+                vad_instance.set_session_data(default_session_id, "context_id", shared_context_id)
+                logger.info(f"VADに共有context_idを設定: {shared_context_id}")
+
+            logger.info(
+                f"VADセッション設定完了: session_id={default_session_id}, user_id={default_user_id}, context_id={shared_context_id}"
+            )
+
+            # context_id更新タスクを開始
+            update_vad_context = create_vad_context_updater(default_session_id)
+            context_update_task = asyncio.create_task(update_vad_context())
+
+            # マイクストリームを処理
+            logger.info("マイクストリームの処理を開始します")
+            stream_count = 0
+            async for audio_chunk in await vad_instance.process_stream(
+                audio_recorder.start_stream(), session_id=default_session_id
+            ):
+                stream_count += 1
+                if stream_count % 100 == 0:  # 100チャンクごとにログ出力
+                    logger.debug(f"音声チャンクを処理中: {stream_count}チャンク目")
+
+        except Exception as e:
+            logger.error(f"マイク入力エラー: {e}", exc_info=True)
 
     # アプリケーション終了時のクリーンアップ
     @app.on_event("startup")
@@ -810,80 +944,6 @@ def create_app(config_dir=None):
 
         # マイク入力の開始（STTが有効な場合）
         if is_use_stt and stt_api_key and vad_instance:
-
-            async def process_mic_input():
-                """マイクからの音声入力を処理する"""
-                try:
-                    logger.info("マイク入力を開始します")
-
-                    # 音声入力待ち状態の通知
-                    if cocoro_dock_client:
-                        await cocoro_dock_client.send_status_update(
-                            "音声入力待ち", status_type="voice_waiting"
-                        )
-
-                    audio_device = AudioDevice()
-                    logger.info(f"使用するマイクデバイス: {audio_device.input_device}")
-
-                    audio_recorder = AudioRecorder(
-                        sample_rate=16000,
-                        device_index=audio_device.input_device,
-                        channels=1,
-                        chunk_size=512,
-                    )
-                    logger.info("AudioRecorderを初期化しました")
-
-                    # デフォルトユーザーIDとセッションIDを設定
-                    default_user_id = "voice_user"
-                    default_session_id = f"voice_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-
-                    # VADにユーザーIDとコンテキストIDを設定
-                    vad_instance.set_session_data(
-                        default_session_id, "user_id", default_user_id, create_session=True
-                    )
-                    # 共有context_idがある場合は使用
-                    if shared_context_id:
-                        vad_instance.set_session_data(
-                            default_session_id, "context_id", shared_context_id
-                        )
-                        logger.info(f"VADに共有context_idを設定: {shared_context_id}")
-
-                    logger.info(
-                        f"VADセッション設定完了: session_id={default_session_id}, user_id={default_user_id}, context_id={shared_context_id}"
-                    )
-
-                    # 定期的に共有context_idをチェックして更新する関数
-                    async def update_vad_context():
-                        """VADセッションのcontext_idを定期的に更新"""
-                        nonlocal shared_context_id
-                        last_context_id = shared_context_id
-
-                        while True:
-                            await asyncio.sleep(0.5)  # 0.5秒ごとにチェック
-                            if shared_context_id and shared_context_id != last_context_id:
-                                # 共有context_idが更新されたらVADセッションも更新
-                                vad_instance.set_session_data(
-                                    default_session_id, "context_id", shared_context_id
-                                )
-                                logger.info(f"VADセッションのcontext_idを更新: {shared_context_id}")
-                                last_context_id = shared_context_id
-
-                    # context_id更新タスクを開始
-                    context_update_task = asyncio.create_task(update_vad_context())
-
-                    # マイクストリームを処理
-                    logger.info("マイクストリームの処理を開始します")
-                    stream_count = 0
-                    async for audio_chunk in await vad_instance.process_stream(
-                        audio_recorder.start_stream(), session_id=default_session_id
-                    ):
-                        stream_count += 1
-                        if stream_count % 100 == 0:  # 100チャンクごとにログ出力
-                            logger.debug(f"音声チャンクを処理中: {stream_count}チャンク目")
-
-                except Exception as e:
-                    logger.error(f"マイク入力エラー: {e}", exc_info=True)
-
             mic_input_task = asyncio.create_task(process_mic_input())
 
     @app.on_event("shutdown")
