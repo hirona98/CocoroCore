@@ -203,9 +203,9 @@ CocoroDockが使います。
 
 ```json
 {
-  "command": "shutdown" | "restart" | "reloadConfig" | "ttsControl",
+  "command": "shutdown" | "restart" | "reloadConfig" | "ttsControl" | "messageWindowControl",
   "params": {
-    "enabled": true  // ttsControlの場合のみ
+    "enabled": true  // ttsControl、messageWindowControlの場合のみ
   }
 }
 ```
@@ -230,6 +230,32 @@ CocoroDockが使います。
   "params": {
     "enabled": false
   }
+}
+```
+
+#### メッセージウィンドウコントロール仕様
+`messageWindowControl`コマンドは、キャラクターのメッセージウィンドウ（吹き出し）の表示/非表示を制御します。
+
+**リクエスト例:**
+```json
+{
+  "command": "messageWindowControl",
+  "params": {
+    "enabled": true
+  }
+}
+```
+
+**パラメータ:**
+- `enabled` (boolean): `true`でメッセージウィンドウ表示、`false`で非表示
+- 設定は`setting.json`の`showMessageWindow`フィールドに保存され、アプリケーション再起動後も維持されます
+
+**レスポンス:**
+```json
+{
+  "status": "success",
+  "message": "Message window enabled" | "Message window disabled",
+  "timestamp": "2024-01-01T00:00:00Z"
 }
 ```
 
