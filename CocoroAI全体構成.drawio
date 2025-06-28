@@ -1,6 +1,6 @@
 <mxfile host="65bd71144e">
     <diagram name="ページ1" id="o39PR-zt318VI3z1FR7i">
-        <mxGraphModel dx="182" dy="662" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+        <mxGraphModel dx="859" dy="829" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
             <root>
                 <mxCell id="0"/>
                 <mxCell id="1" parent="0"/>
@@ -10,7 +10,7 @@
                 <mxCell id="3" value="" style="rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.25;exitY=1;exitDx=0;exitDy=0;entryX=0.25;entryY=0;entryDx=0;entryDy=0;" parent="1" source="7" target="22" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="4" value="チャット&lt;div&gt;テキスト送信&lt;div&gt;&lt;span style=&quot;color: rgb(63, 63, 63);&quot;&gt;画像送信&lt;/span&gt;&lt;font color=&quot;#000000&quot;&gt;&lt;br&gt;&lt;/font&gt;&lt;div&gt;通知要求&lt;/div&gt;&lt;div&gt;終了要求&lt;/div&gt;&lt;div&gt;(REST)&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="3" vertex="1" connectable="0">
+                <mxCell id="4" value="チャット&lt;div&gt;テキスト送信&lt;/div&gt;&lt;div&gt;STT設定変更&lt;br&gt;&lt;div&gt;&lt;span style=&quot;color: rgb(63, 63, 63);&quot;&gt;画像送信&lt;/span&gt;&lt;font color=&quot;#000000&quot;&gt;&lt;br&gt;&lt;/font&gt;&lt;div&gt;通知要求&lt;/div&gt;&lt;div&gt;終了要求&lt;/div&gt;&lt;div&gt;(REST)&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="3" vertex="1" connectable="0">
                     <mxGeometry x="-0.525" y="1" relative="1" as="geometry">
                         <mxPoint x="-7" y="-20" as="offset"/>
                     </mxGeometry>
@@ -26,7 +26,7 @@
                 <mxCell id="50" style="edgeStyle=none;html=1;entryX=0.25;entryY=0;entryDx=0;entryDy=0;exitX=0.75;exitY=1;exitDx=0;exitDy=0;" parent="1" source="7" target="16" edge="1">
                     <mxGeometry relative="1" as="geometry"/>
                 </mxCell>
-                <mxCell id="51" value="&lt;div style=&quot;color: rgb(63, 63, 63);&quot;&gt;設定リロード要求&lt;/div&gt;&lt;div style=&quot;color: rgb(63, 63, 63);&quot;&gt;アニメーション要求&lt;/div&gt;&lt;div style=&quot;color: rgb(63, 63, 63);&quot;&gt;終了要求&lt;/div&gt;&lt;div style=&quot;color: rgb(63, 63, 63);&quot;&gt;(REST)&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="50" vertex="1" connectable="0">
+                <mxCell id="51" value="&lt;div style=&quot;color: rgb(63, 63, 63);&quot;&gt;設定リロード要求&lt;/div&gt;&lt;div style=&quot;color: rgb(63, 63, 63);&quot;&gt;TTS設定変更&lt;/div&gt;&lt;div style=&quot;color: rgb(63, 63, 63);&quot;&gt;アニメーション要求&lt;/div&gt;&lt;div style=&quot;color: rgb(63, 63, 63);&quot;&gt;終了要求&lt;/div&gt;&lt;div style=&quot;color: rgb(63, 63, 63);&quot;&gt;(REST)&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="50" vertex="1" connectable="0">
                     <mxGeometry x="-0.4028" y="-1" relative="1" as="geometry">
                         <mxPoint x="1" as="offset"/>
                     </mxGeometry>
@@ -153,12 +153,12 @@
                 <mxCell id="52" value="&lt;div&gt;&lt;span style=&quot;background-color: transparent;&quot;&gt;外部公開&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;color: rgb(63, 63, 63);&quot;&gt;0.0.0.0&lt;/span&gt;&lt;span style=&quot;background-color: transparent;&quot;&gt;&lt;/span&gt;&lt;/div&gt;&lt;div&gt;&lt;span style=&quot;background-color: transparent;&quot;&gt;REST API: 55604&lt;/span&gt;&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
                     <mxGeometry x="1320" y="212.5" width="116" height="57" as="geometry"/>
                 </mxCell>
-                <mxCell id="55" style="edgeStyle=none;html=1;entryX=0.096;entryY=0.01;entryDx=0;entryDy=0;exitX=0.096;exitY=1.037;exitDx=0;exitDy=0;exitPerimeter=0;entryPerimeter=0;" edge="1" parent="1" source="7" target="34">
+                <mxCell id="55" style="edgeStyle=none;html=1;entryX=0.096;entryY=0.01;entryDx=0;entryDy=0;exitX=0.096;exitY=1.037;exitDx=0;exitDy=0;exitPerimeter=0;entryPerimeter=0;" parent="1" source="7" target="34" edge="1">
                     <mxGeometry relative="1" as="geometry">
                         <Array as="points"/>
                     </mxGeometry>
                 </mxCell>
-                <mxCell id="56" value="終了要求&lt;div&gt;(REST)&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" vertex="1" connectable="0" parent="55">
+                <mxCell id="56" value="終了要求&lt;div&gt;(REST)&lt;/div&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" parent="55" vertex="1" connectable="0">
                     <mxGeometry x="-0.1353" y="-3" relative="1" as="geometry">
                         <mxPoint y="-119" as="offset"/>
                     </mxGeometry>
