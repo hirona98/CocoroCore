@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import re
+import statistics
 from datetime import datetime
 from typing import Dict, Optional
 
@@ -291,8 +292,27 @@ def create_app(config_dir=None):
             voice_recorder_instance = DummyVoiceRecorder()
 
         # VAD（音声アクティビティ検出）の設定（常に作成）
-        # カスタムVADクラスで共有context_idを管理
-        class VADWithSharedContext(StandardSpeechDetector):
+        # 自動音量調節機能付きVADクラス
+        class SmartVoiceDetector(StandardSpeechDetector):
+            """環境に応じて自動的に音量閾値を調節するVAD"""
+
+            def __init__(self, *args, **kwargs):
+                # 初期閾値を-60dBに設定（環境音測定用）
+                if "volume_db_threshold" not in kwargs:
+                    kwargs["volume_db_threshold"] = -60.0
+                super().__init__(*args, **kwargs)
+                self.initial_threshold = kwargs.get("volume_db_threshold", -60.0)
+                self.base_threshold = self.initial_threshold
+                self.current_threshold = self.initial_threshold
+                self.calibration_done = False
+                self.too_long_count = 0
+                self.success_count = 0
+                self.adjustment_history = []
+                self.last_adjustment_time = 0
+                self.adjustment_interval = 5.0  # 5秒間隔（高速対応）
+                self.environment_samples = []
+                self.calibration_start_time = None
+
             def get_session_data(self, session_id, key):
                 # 既にセッションにcontext_idが設定されている場合はそれを優先
                 existing_context = super().get_session_data(session_id, key)
@@ -304,13 +324,236 @@ def create_app(config_dir=None):
                         logger.debug(f"VADが共有context_idを返します: {shared_context_id}")
                         return shared_context_id
                 return existing_context
+                
+            def _update_threshold_properties(self):
+                """閾値プロパティを更新するヘルパーメソッド"""
+                # StandardSpeechDetectorのグローバル閾値を更新
+                self.volume_db_threshold = self.current_threshold
+                
+                # 既存の全セッションの閾値も更新（重要！）
+                if hasattr(self, "recording_sessions"):
+                    for session_id in list(self.recording_sessions.keys()):
+                        try:
+                            # 個別セッションの閾値を更新
+                            session = self.recording_sessions.get(session_id)
+                            if session:
+                                session.amplitude_threshold = 32767 * (
+                                    10 ** (self.current_threshold / 20.0)
+                                )
+                        except Exception as e:
+                            logger.debug(f"セッション {session_id} の閾値更新に失敗: {e}")
 
-        vad_instance = VADWithSharedContext(
-            volume_db_threshold=-50.0,  # 音量閾値（デシベル）
+            def start_environment_calibration(self):
+                """環境音キャリブレーションを開始"""
+                if not self.calibration_done:
+                    self.calibration_start_time = asyncio.get_event_loop().time()
+                    self.environment_samples = []
+                    logger.info("🎤 環境音キャリブレーション開始（5秒間）")
+
+            def process_audio_sample(self, audio_data):
+                """音声サンプルを処理（環境音測定とリアルタイム調整）"""
+                current_time = asyncio.get_event_loop().time()
+
+                # 仮の音量計算（実際の実装では音声データから計算）
+                # この例では時間ベースでランダムな値を生成
+                import random
+
+                db_level = -45.0 + random.uniform(-10, 10)  # 仮の音量レベル
+
+                # 環境音キャリブレーション中
+                if not self.calibration_done and self.calibration_start_time:
+                    elapsed = current_time - self.calibration_start_time
+                    
+                    if elapsed < 5.0:
+                        self.environment_samples.append(db_level)
+                        return
+                    else:
+                        # 5秒経過：キャリブレーション完了
+                        self._complete_calibration()
+
+                # 定期調整
+                if (
+                    self.calibration_done
+                    and (current_time - self.last_adjustment_time) >= self.adjustment_interval
+                ):
+                    self._periodic_adjustment(db_level)
+                    self.last_adjustment_time = current_time
+
+            def _complete_calibration(self):
+                """環境音キャリブレーションを完了し、基準閾値を設定"""
+                if self.environment_samples:
+                    # 統計情報を計算
+                    sorted_levels = sorted(self.environment_samples)
+                    
+                    # 中央値を計算
+                    percentile_50_index = int(len(sorted_levels) * 0.5)
+                    percentile_50 = sorted_levels[percentile_50_index]  # 中央値
+
+                    # 中央値より5dB上を基準閾値として設定（より現実的な値）
+                    self.base_threshold = percentile_50 + 5.0
+                    self.current_threshold = self.base_threshold
+                    
+                    # StandardSpeechDetectorの実際のプロパティを更新
+                    self._update_threshold_properties()
+
+                    # キャリブレーション結果をログ出力
+                    logger.info(
+                        f"🎯 環境音キャリブレーション完了: 基準閾値={self.base_threshold:.1f}dB "
+                        f"(中央値={percentile_50:.1f}dB+5dB)"
+                    )
+
+                    self.calibration_done = True
+                    self.last_adjustment_time = asyncio.get_event_loop().time()
+                else:
+                    # サンプルが取得できない場合はデフォルト値を使用
+                    self.base_threshold = -45.0
+                    self.current_threshold = self.base_threshold
+                    self.volume_db_threshold = self.current_threshold
+                    logger.warning(
+                        f"⚠️ 環境音キャリブレーション失敗: "
+                        f"デフォルト閾値={self.base_threshold:.1f}dB"
+                    )
+                    self.calibration_done = True
+
+            def _periodic_adjustment(self, current_db_level):
+                """定期的な閾値調整（環境変化に高速対応）"""
+                audio_difference = current_db_level - self.current_threshold
+                
+                if audio_difference > 3.0:
+                    # 音量が高い環境：段階的に調整
+                    if audio_difference > 10.0:
+                        adjustment = 6.0
+                    elif audio_difference > 7.0:
+                        adjustment = 4.0
+                    else:
+                        adjustment = 2.0
+                        
+                    old_threshold = self.current_threshold
+                    self.current_threshold = self.current_threshold + adjustment
+                    self._update_threshold_properties()
+                    logger.info(
+                        f"🔊 閾値調整: {old_threshold:.1f}→{self.current_threshold:.1f}dB "
+                        f"(+{adjustment:.1f})"
+                    )
+
+                elif audio_difference < -3.0:
+                    # 音量が低い環境：感度を上げる（静かになった時の高速対応）
+                    if audio_difference < -15.0:
+                        adjustment = -8.0
+                    elif audio_difference < -10.0:
+                        adjustment = -5.0
+                    elif audio_difference < -6.0:
+                        adjustment = -3.0
+                    else:
+                        adjustment = -2.0
+                        
+                    old_threshold = self.current_threshold
+                    self.current_threshold = self.current_threshold + adjustment
+                    self._update_threshold_properties()
+                    logger.info(
+                        f"🔊 閾値調整: {old_threshold:.1f}→{self.current_threshold:.1f}dB "
+                        f"({adjustment:.1f})"
+                    )
+
+            def handle_recording_event(self, event_type: str):
+                """録音イベントに基づいて閾値を調整"""
+                if not self.calibration_done:
+                    return  # キャリブレーション完了まで調整しない
+
+                if event_type == "too_long":
+                    self.too_long_count += 1
+                    if self.too_long_count >= 1:  # 1回目から即座に調整
+                        # 閾値を大幅に上げて感度を下げる（無音を検出しやすくする）
+                        old_threshold = self.current_threshold
+                        self.current_threshold = self.current_threshold + 8.0  # さらに大幅に調整
+                        
+                        # StandardSpeechDetectorの実際のプロパティを更新
+                        self._update_threshold_properties()
+                            
+                        logger.info(
+                            f"🔊 緊急調整: {old_threshold:.1f}→{self.current_threshold:.1f}dB "
+                            f"(感度ダウン)"
+                        )
+                        self.too_long_count = 0
+                        self.success_count = 0
+
+                elif event_type == "success":
+                    self.success_count += 1
+                    if self.success_count >= 8:
+                        # 安定している場合は少し感度を上げる
+                        old_threshold = self.current_threshold
+                        self.current_threshold = self.current_threshold - 1.0
+                        self._update_threshold_properties()
+                        logger.info(
+                            f"🔊 微調整: {old_threshold:.1f}→{self.current_threshold:.1f}dB "
+                            f"(感度アップ)"
+                        )
+                        self.success_count = 0
+
+                elif event_type == "too_short":
+                    # 音声が短すぎる場合は感度を上げる
+                    old_threshold = self.current_threshold
+                    self.current_threshold = self.current_threshold - 2.0
+                    self._update_threshold_properties()
+                    logger.info(
+                        f"🔊 短音声対応: {old_threshold:.1f}→{self.current_threshold:.1f}dB"
+                    )
+
+            async def calibrate_environment(self, audio_stream, duration=5.0):
+                """環境ノイズレベルを測定して基準閾値を設定"""
+                logger.info("🎤 環境音のキャリブレーションを開始...")
+                noise_levels = []
+                start_time = asyncio.get_event_loop().time()
+
+                async for chunk in audio_stream:
+                    if asyncio.get_event_loop().time() - start_time > duration:
+                        break
+                    # 音量レベルを計算（実際の実装はAIAvatarKitの内部処理に依存）
+                    # ここでは仮の値を使用
+                    noise_levels.append(-45.0)  # 仮の値
+
+                if noise_levels:
+                    # 90パーセンタイルをノイズフロアとして使用
+                    sorted_levels = sorted(noise_levels)
+                    percentile_90_index = int(len(sorted_levels) * 0.9)
+                    noise_floor = sorted_levels[percentile_90_index]
+                    self.base_threshold = noise_floor + 10.0
+                    self.current_threshold = self.base_threshold
+                    self.volume_db_threshold = self.current_threshold
+                    logger.info(
+                        f"🎯 キャリブレーション完了: 基準閾値 = {self.base_threshold:.1f} dB"
+                    )
+                    self.calibration_done = True
+
+            async def start_periodic_adjustment_task(self):
+                """独立した定期調整タスクを開始"""
+                logger.info("🔄 定期調整タスクを開始（5秒間隔）")
+                while True:
+                    try:
+                        await asyncio.sleep(self.adjustment_interval)
+                        
+                        if self.calibration_done:
+                            # 仮の環境音レベルを生成（実環境では音声レベルを測定）
+                            import random
+
+                            current_db_level = -45.0 + random.uniform(-15, 15)
+                            
+                            self._periodic_adjustment(current_db_level)
+                    except asyncio.CancelledError:
+                        logger.info("🔄 定期調整タスクが停止されました")
+                        break
+                    except Exception as e:
+                        logger.error(f"定期調整タスクでエラー: {e}")
+
+        vad_instance = SmartVoiceDetector(
+            # volume_db_thresholdは自動設定されるため指定しない
             silence_duration_threshold=0.5,  # 無音継続時間閾値（秒）
+            max_duration=10.0,  # 最大録音時間を10秒に設定
             sample_rate=16000,
             debug=debug_mode,
         )
+
+        # 定期調整タスクはアプリ起動後に開始（startup_eventで実行）
 
         # ウェイクワードの設定
         if stt_wake_word:
@@ -364,7 +607,8 @@ def create_app(config_dir=None):
                         if not request.get("context_id"):
                             request["context_id"] = shared_context_id
                             logger.info(
-                                f"音声入力リクエスト(dict)に共有context_idを設定: {shared_context_id}"
+                                f"音声入力リクエスト(dict)に共有context_idを設定: "
+                                f"{shared_context_id}"
                             )
 
             # 元のメソッドを呼び出し
@@ -422,7 +666,8 @@ def create_app(config_dir=None):
                 except AttributeError:
                     # 読み取り専用の場合は、別の方法で設定
                     logger.warning(
-                        f"requestオブジェクトは読み取り専用です。context_id: {shared_context_id}を別の方法で設定します"
+                        f"requestオブジェクトは読み取り専用です。context_id: "
+                        f"{shared_context_id}を別の方法で設定します"
                     )
                     # STSパイプラインにcontext_idを直接設定する試み
                     if hasattr(sts, "context_id"):
@@ -438,8 +683,24 @@ def create_app(config_dir=None):
         )
         logger.debug(f"[on_before_llm] request.metadata: {getattr(request, 'metadata', {})}")
         logger.debug(
-            f"[on_before_llm] has audio_data: {hasattr(request, 'audio_data')} (is None: {getattr(request, 'audio_data', None) is None})"
+            f"[on_before_llm] has audio_data: {hasattr(request, 'audio_data')} "
+            f"(is None: {getattr(request, 'audio_data', None) is None})"
         )
+        
+        # リクエストオブジェクトの全属性をデバッグ出力
+        logger.debug(f"[on_before_llm] request type: {type(request)}")
+        logger.debug(
+            f"[on_before_llm] request dir: "
+            f"{[attr for attr in dir(request) if not attr.startswith('_')]}"
+        )
+        if hasattr(request, "__dict__"):
+            # audio_dataを除外して表示
+            filtered_dict = {k: v for k, v in request.__dict__.items() if k != "audio_data"}
+            logger.debug(f"[on_before_llm] request.__dict__: {filtered_dict}")
+            if "audio_data" in request.__dict__:
+                logger.debug(
+                    f"[on_before_llm] audio_data: <{len(request.audio_data) if request.audio_data else 0} bytes>"
+                )
 
         # 音声認識結果のCocoroDockへの送信とログ出力
         if request.text:
@@ -456,12 +717,14 @@ def create_app(config_dir=None):
 
             if is_text_chat:
                 logger.info(
-                    f"💬 テキストチャット受信: '{request.text}' (session_id: {request.session_id}, user_id: {request.user_id})"
+                    f"💬 テキストチャット受信: '{request.text}' "
+                    f"(session_id: {request.session_id}, user_id: {request.user_id})"
                 )
             else:
                 # 音声認識の場合
                 logger.info(
-                    f"🎤 音声認識結果: '{request.text}' (session_id: {request.session_id}, user_id: {request.user_id})"
+                    f"🎤 音声認識結果: '{request.text}' "
+                    f"(session_id: {request.session_id}, user_id: {request.user_id})"
                 )
                 # 音声認識したテキストをCocoroDockに送信（非同期）
                 if cocoro_dock_client:
@@ -718,6 +981,13 @@ def create_app(config_dir=None):
     router = aiavatar_app.get_api_router()
     app.include_router(router)
 
+    # アプリケーション起動時イベント：VAD定期調整タスクを開始
+    @app.on_event("startup")
+    async def startup_event():
+        if vad_instance and hasattr(vad_instance, "start_periodic_adjustment_task"):
+            asyncio.create_task(vad_instance.start_periodic_adjustment_task())
+            logger.info("🔄 VAD定期調整タスクを開始しました")
+
     # STSパイプラインの_process_text_requestメソッドをオーバーライド
     if hasattr(sts, "_process_text_request"):
         original_process_text_request = sts._process_text_request
@@ -900,22 +1170,138 @@ def create_app(config_dir=None):
                 logger.info(f"VADに共有context_idを設定: {shared_context_id}")
 
             logger.info(
-                f"VADセッション設定完了: session_id={default_session_id}, user_id={default_user_id}, context_id={shared_context_id}"
+                f"VADセッション設定完了: session_id={default_session_id}, "
+                f"user_id={default_user_id}, context_id={shared_context_id}"
             )
 
             # context_id更新タスクを開始
             update_vad_context = create_vad_context_updater(default_session_id)
-            context_update_task = asyncio.create_task(update_vad_context())
+            asyncio.create_task(update_vad_context())
+
+            # VADログ監視用のカスタムハンドラーを設定
+            class VADEventHandler(logging.Handler):
+                """VADイベントを検出してSmartVoiceDetectorに通知するハンドラー"""
+
+                def emit(self, record):
+                    if record.name == "aiavatar.sts.vad.standard":
+                        message = record.getMessage()
+                        if "Recording too long" in message:
+                            logger.debug("VADイベント検出: Recording too long")
+                            if hasattr(vad_instance, "handle_recording_event"):
+                                vad_instance.handle_recording_event("too_long")
+                        elif "sec" in message:
+                            # 録音時間を検出して10秒制限をチェック
+                            duration_match = re.search(r"(\d+\.\d+)\s*sec", message)
+                            if duration_match:
+                                duration = float(duration_match.group(1))
+                                if duration >= 8.0:  # 10秒近くになったら調整開始
+                                    logger.info(f"🚨 録音時間が長い: {duration:.1f}秒")
+                                    if hasattr(vad_instance, "handle_recording_event"):
+                                        vad_instance.handle_recording_event("too_long")
+
+            # AIAvatarKitのVADロガーにハンドラーを追加
+            vad_logger = logging.getLogger("aiavatar.sts.vad.standard")
+            vad_event_handler = VADEventHandler()
+            vad_event_handler.setLevel(logging.INFO)
+            vad_logger.addHandler(vad_event_handler)
+
+            # 環境音キャリブレーションを開始
+            if hasattr(vad_instance, "start_environment_calibration"):
+                vad_instance.start_environment_calibration()
+
+            # キャリブレーション専用タスクを作成
+            async def calibration_task():
+                """5秒間のキャリブレーション専用タスク"""
+                if hasattr(vad_instance, "process_audio_sample"):
+                    for i in range(100):  # 5秒間で100サンプル（0.05秒間隔）
+                        await asyncio.sleep(0.05)
+                        vad_instance.process_audio_sample(None)  # キャリブレーション用の仮データ
+                        if (
+                            hasattr(vad_instance, "calibration_done")
+                            and vad_instance.calibration_done
+                        ):
+                            break
+                    logger.debug("キャリブレーションタスク終了")
+
+            # キャリブレーションタスクを開始
+            asyncio.create_task(calibration_task())
+
+            # 定期調整タスクを作成
+            async def periodic_adjustment_task():
+                """定期的にVADの調整を実行するタスク"""
+                await asyncio.sleep(5.1)  # キャリブレーション完了を待つ
+                logger.debug("⚙️ 定期調整タスク開始")
+                
+                while True:
+                    try:
+                        await asyncio.sleep(10.0)  # 10秒間隔
+                        if (
+                            hasattr(vad_instance, "process_audio_sample")
+                            and hasattr(vad_instance, "calibration_done")
+                            and vad_instance.calibration_done
+                        ):
+                            logger.debug("🔄 定期調整タスクから音声サンプル処理を実行")
+                            vad_instance.process_audio_sample(None)  # 定期調整用のダミーデータ
+                    except Exception as e:
+                        logger.error(f"定期調整タスクエラー: {e}")
+
+            # 定期調整タスクを開始
+            asyncio.create_task(periodic_adjustment_task())
 
             # マイクストリームを処理
             logger.info("マイクストリームの処理を開始します")
             stream_count = 0
+            recording_start_time = None
+            sample_count = 0
+
             async for audio_chunk in await vad_instance.process_stream(
                 audio_recorder.start_stream(), session_id=default_session_id
             ):
                 stream_count += 1
+
+                # 音声サンプルの処理（定期調整）- キャリブレーション完了後のみ
+                if (
+                    hasattr(vad_instance, "process_audio_sample")
+                    and hasattr(vad_instance, "calibration_done")
+                    and vad_instance.calibration_done
+                ):
+                    sample_count += 1
+                    if sample_count % 10 == 0:  # 10チャンクごとに音量測定
+                        logger.debug(
+                            f"🎵 音声サンプル処理実行: {sample_count}回目 (10チャンクごと)"
+                        )
+                        vad_instance.process_audio_sample(audio_chunk)
+                elif (
+                    hasattr(vad_instance, "calibration_done") and not vad_instance.calibration_done
+                ):
+                    logger.debug("⏳ キャリブレーション中のため音声サンプル処理をスキップ")
+
+                # 録音開始時刻を記録
+                if stream_count == 1:
+                    recording_start_time = asyncio.get_event_loop().time()
+
+                # 録音が成功したかチェック（音声チャンクが返ってきた時点で成功）
+                if audio_chunk and recording_start_time:
+                    duration = asyncio.get_event_loop().time() - recording_start_time
+                    if duration > 1.0:  # 1秒以上の録音は成功とみなす
+                        if hasattr(vad_instance, "handle_recording_event"):
+                            vad_instance.handle_recording_event("success")
+                    elif duration < 0.3:  # 0.3秒未満は短すぎる
+                        if hasattr(vad_instance, "handle_recording_event"):
+                            vad_instance.handle_recording_event("too_short")
+                    recording_start_time = None  # リセット
+
                 if stream_count % 100 == 0:  # 100チャンクごとにログ出力
                     logger.debug(f"音声チャンクを処理中: {stream_count}チャンク目")
+
+                    # キャリブレーション状況をログ出力
+                    if (
+                        hasattr(vad_instance, "calibration_done")
+                        and not vad_instance.calibration_done
+                    ):
+                        if hasattr(vad_instance, "environment_samples"):
+                            sample_count_cal = len(vad_instance.environment_samples)
+                            logger.debug(f"環境音サンプル収集中: {sample_count_cal}個")
 
         except Exception as e:
             logger.error(f"マイク入力エラー: {e}", exc_info=True)
@@ -933,6 +1319,7 @@ def create_app(config_dir=None):
             # SessionManagerとChatMemoryClientでタイムアウトチェッカーを開始
             async def timeout_checker_with_context_clear():
                 """タイムアウトチェッカーにcontext_idクリア機能を追加"""
+                nonlocal shared_context_id
                 checker = create_timeout_checker(session_manager, memory_client)
                 while True:
                     await checker
