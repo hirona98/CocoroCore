@@ -5,17 +5,13 @@ import json
 import logging
 import os
 import re
-import statistics
 from datetime import datetime
 from typing import Dict, Optional
 
 from aiavatar.adapter.http.server import AIAvatarHttpServer
 from aiavatar.device.audio import AudioDevice, AudioRecorder
-from aiavatar.sts.llm.litellm import LiteLLMService
 from aiavatar.sts.pipeline import STSPipeline
-from aiavatar.sts.stt.amivoice import AmiVoiceSpeechRecognizer
 from aiavatar.sts.tts import SpeechSynthesizerDummy
-from aiavatar.sts.vad import StandardSpeechDetector
 from aiavatar.sts.voice_recorder.file import FileVoiceRecorder
 from fastapi import Depends, FastAPI
 
@@ -24,10 +20,13 @@ from api_clients import CocoroDockClient, CocoroShellClient
 from config_loader import load_config
 from config_validator import validate_config
 from dummy_db import DummyPerformanceRecorder, DummyVoiceRecorder
+from llm_manager import LLMStatusManager, create_llm_service
 from memory_client import ChatMemoryClient
 from memory_tools import setup_memory_tools
 from session_manager import SessionManager, create_timeout_checker
 from shutdown_handler import shutdown_handler
+from stt_manager import create_stt_service
+from vad_manager import SmartVoiceDetector, VADEventHandler
 
 # Ollama画像サポートパッチを適用
 try:
@@ -120,97 +119,21 @@ def create_app(config_dir=None):
     # 音声とテキストで共有するcontext_id
     shared_context_id = None
 
-    # LLM処理状況を管理するクラス
-    class LLMStatusManager:
-        def __init__(self, dock_client):
-            self.dock_client = dock_client
-            self.active_requests = {}  # request_id: asyncio.Task のマッピング
-
-        async def start_periodic_status(self, request_id: str):
-            """定期的なステータス送信を開始"""
-
-            async def send_periodic_status():
-                counter = 0
-                try:
-                    while True:
-                        await asyncio.sleep(1.0)
-                        counter += 1
-                        if self.dock_client:
-                            await self.dock_client.send_status_update(
-                                "LLM応答待ち", status_type="llm_processing"
-                            )
-                            logger.debug(f"LLM処理ステータス送信: {counter}秒")
-                except asyncio.CancelledError:
-                    logger.debug(f"LLM処理ステータス送信を終了: request_id={request_id}")
-                    raise
-
-            # タスクを作成して保存
-            task = asyncio.create_task(send_periodic_status())
-            self.active_requests[request_id] = task
-            logger.debug(f"LLM処理ステータス送信を開始: request_id={request_id}")
-
-        def stop_periodic_status(self, request_id: str):
-            """定期的なステータス送信を停止"""
-            if request_id in self.active_requests:
-                task = self.active_requests[request_id]
-                task.cancel()
-                del self.active_requests[request_id]
-                logger.debug(f"LLM処理ステータス送信タスクをキャンセル: request_id={request_id}")
+    # shared_context_idのプロバイダー関数を定義
+    def get_shared_context_id():
+        return shared_context_id
 
     # LLMステータスマネージャーの初期化
     llm_status_manager = LLMStatusManager(cocoro_dock_client)
 
-    # APIキーの検証
-    if not llm_api_key:
-        raise ValueError("APIキーが設定されていません。設定ファイルを確認してください。")
-
-    # LLMサービスを初期化（正しいシステムプロンプトを使用）
-    base_llm = LiteLLMService(
+    # LLMサービスを初期化
+    llm = create_llm_service(
         api_key=llm_api_key,
         model=llm_model,
+        system_prompt=system_prompt,
+        context_provider=get_shared_context_id,
         temperature=1.0,
-        system_prompt=system_prompt,  # キャラクター固有のプロンプトを使用
     )
-
-    # LLMサービスのラッパークラスを作成してcontext_idを管理
-    class LLMWithSharedContext:
-        def __init__(self, base_llm):
-            self.base_llm = base_llm
-
-        def __getattr__(self, name):
-            # 属性アクセスを基底クラスに委譲
-            return getattr(self.base_llm, name)
-
-        def __setattr__(self, name, value):
-            # base_llm以外の属性は基底クラスに設定
-            if name == "base_llm":
-                super().__setattr__(name, value)
-            else:
-                setattr(self.base_llm, name, value)
-
-        async def get_response(self, messages, context_id=None, **kwargs):
-            # 共有context_idがあり、引数にcontext_idがない場合は使用
-            if shared_context_id and not context_id:
-                context_id = shared_context_id
-                logger.debug(f"LLMレスポンスで共有context_idを使用: {context_id}")
-
-            # 基底クラスのget_responseを呼び出し
-            return await self.base_llm.get_response(messages, context_id=context_id, **kwargs)
-
-        async def get_response_stream(self, messages, context_id=None, **kwargs):
-            # 共有context_idがあり、引数にcontext_idがない場合は使用
-            if shared_context_id and not context_id:
-                context_id = shared_context_id
-                logger.debug(f"LLMストリームレスポンスで共有context_idを使用: {context_id}")
-
-            # 基底クラスのget_response_streamを呼び出し
-            async for chunk in self.base_llm.get_response_stream(
-                messages, context_id=context_id, **kwargs
-            ):
-                yield chunk
-
-    # ラッパーを使用
-    llm = LLMWithSharedContext(base_llm)
 
     # 音声合成はCocoroShell側で行うためダミーを使用
     custom_tts = SpeechSynthesizerDummy()
@@ -229,55 +152,16 @@ def create_app(config_dir=None):
     wakewords = None
     vad_instance = None
 
-    if stt_api_key:
-        # 音声認識エンジンの選択（APIキーがあれば常に作成）
-        if stt_engine == "openai":
-            logger.info("STTインスタンスを作成します: OpenAI Whisper")
-            from aiavatar.sts.stt.openai import OpenAISpeechRecognizer
+    # STTサービスを作成
+    stt_instance = create_stt_service(
+        engine=stt_engine,
+        api_key=stt_api_key,
+        language=stt_language,
+        dock_client=cocoro_dock_client,
+        debug=debug_mode,
+    )
 
-            base_stt = OpenAISpeechRecognizer(
-                openai_api_key=stt_api_key,
-                sample_rate=16000,
-                language=stt_language,
-                debug=debug_mode,
-            )
-        else:  # デフォルトはAmiVoice
-            logger.info(f"STTインスタンスを作成します: AmiVoice (engine={stt_engine})")
-
-            base_stt = AmiVoiceSpeechRecognizer(
-                amivoice_api_key=stt_api_key,
-                engine="-a2-ja-general",  # 日本語汎用エンジン
-                sample_rate=16000,
-                debug=debug_mode,
-            )
-
-        # STTラッパークラスで音声認識開始時にステータスを送信
-        class STTWithStatus:
-            def __init__(self, base_stt, dock_client):
-                self.base_stt = base_stt
-                self.dock_client = dock_client
-                # 基底クラスの属性を引き継ぐ
-                for attr in dir(base_stt):
-                    if not attr.startswith("_") and attr != "transcribe":
-                        setattr(self, attr, getattr(base_stt, attr))
-
-            async def transcribe(self, data: bytes) -> str:
-                # 音声認識開始のステータス送信
-                if self.dock_client:
-                    asyncio.create_task(
-                        self.dock_client.send_status_update(
-                            "音声認識(API)", status_type="amivoice_sending"
-                        )
-                    )
-                # 実際の音声認識を実行
-                return await self.base_stt.transcribe(data)
-
-            async def close(self):
-                if hasattr(self.base_stt, "close"):
-                    await self.base_stt.close()
-
-        stt_instance = STTWithStatus(base_stt, cocoro_dock_client)
-
+    if stt_instance:
         # デバッグモード時のみ音声記録を有効化
         if debug_mode:
             voice_recorder_enabled = True
@@ -292,260 +176,12 @@ def create_app(config_dir=None):
             voice_recorder_instance = DummyVoiceRecorder()
 
         # VAD（音声アクティビティ検出）の設定（常に作成）
-        # 自動音量調節機能付きVADクラス
-        class SmartVoiceDetector(StandardSpeechDetector):
-            """環境に応じて自動的に音量閾値を調節するVAD"""
-
-            def __init__(self, *args, **kwargs):
-                # 初期閾値を-60dBに設定（環境音測定用）
-                if "volume_db_threshold" not in kwargs:
-                    kwargs["volume_db_threshold"] = -60.0
-                super().__init__(*args, **kwargs)
-                self.initial_threshold = kwargs.get("volume_db_threshold", -60.0)
-                self.base_threshold = self.initial_threshold
-                self.current_threshold = self.initial_threshold
-                self.calibration_done = False
-                self.too_long_count = 0
-                self.success_count = 0
-                self.adjustment_history = []
-                self.last_adjustment_time = 0
-                self.adjustment_interval = 5.0  # 5秒間隔（高速対応）
-                self.environment_samples = []
-                self.calibration_start_time = None
-
-            def get_session_data(self, session_id, key):
-                # 既にセッションにcontext_idが設定されている場合はそれを優先
-                existing_context = super().get_session_data(session_id, key)
-                if key == "context_id":
-                    if existing_context:
-                        logger.debug(f"VADの既存context_idを使用: {existing_context}")
-                        return existing_context
-                    elif shared_context_id:
-                        logger.debug(f"VADが共有context_idを返します: {shared_context_id}")
-                        return shared_context_id
-                return existing_context
-                
-            def _update_threshold_properties(self):
-                """閾値プロパティを更新するヘルパーメソッド"""
-                # StandardSpeechDetectorのグローバル閾値を更新
-                self.volume_db_threshold = self.current_threshold
-                
-                # 既存の全セッションの閾値も更新（重要！）
-                if hasattr(self, "recording_sessions"):
-                    for session_id in list(self.recording_sessions.keys()):
-                        try:
-                            # 個別セッションの閾値を更新
-                            session = self.recording_sessions.get(session_id)
-                            if session:
-                                session.amplitude_threshold = 32767 * (
-                                    10 ** (self.current_threshold / 20.0)
-                                )
-                        except Exception as e:
-                            logger.debug(f"セッション {session_id} の閾値更新に失敗: {e}")
-
-            def start_environment_calibration(self):
-                """環境音キャリブレーションを開始"""
-                if not self.calibration_done:
-                    self.calibration_start_time = asyncio.get_event_loop().time()
-                    self.environment_samples = []
-                    logger.info("🎤 環境音キャリブレーション開始（5秒間）")
-
-            def process_audio_sample(self, audio_data):
-                """音声サンプルを処理（環境音測定とリアルタイム調整）"""
-                current_time = asyncio.get_event_loop().time()
-
-                # 仮の音量計算（実際の実装では音声データから計算）
-                # この例では時間ベースでランダムな値を生成
-                import random
-
-                db_level = -45.0 + random.uniform(-10, 10)  # 仮の音量レベル
-
-                # 環境音キャリブレーション中
-                if not self.calibration_done and self.calibration_start_time:
-                    elapsed = current_time - self.calibration_start_time
-                    
-                    if elapsed < 5.0:
-                        self.environment_samples.append(db_level)
-                        return
-                    else:
-                        # 5秒経過：キャリブレーション完了
-                        self._complete_calibration()
-
-                # 定期調整
-                if (
-                    self.calibration_done
-                    and (current_time - self.last_adjustment_time) >= self.adjustment_interval
-                ):
-                    self._periodic_adjustment(db_level)
-                    self.last_adjustment_time = current_time
-
-            def _complete_calibration(self):
-                """環境音キャリブレーションを完了し、基準閾値を設定"""
-                if self.environment_samples:
-                    # 統計情報を計算
-                    sorted_levels = sorted(self.environment_samples)
-                    
-                    # 中央値を計算
-                    percentile_50_index = int(len(sorted_levels) * 0.5)
-                    percentile_50 = sorted_levels[percentile_50_index]  # 中央値
-
-                    # 中央値より5dB上を基準閾値として設定（より現実的な値）
-                    self.base_threshold = percentile_50 + 5.0
-                    self.current_threshold = self.base_threshold
-                    
-                    # StandardSpeechDetectorの実際のプロパティを更新
-                    self._update_threshold_properties()
-
-                    # キャリブレーション結果をログ出力
-                    logger.info(
-                        f"🎯 環境音キャリブレーション完了: 基準閾値={self.base_threshold:.1f}dB "
-                        f"(中央値={percentile_50:.1f}dB+5dB)"
-                    )
-
-                    self.calibration_done = True
-                    self.last_adjustment_time = asyncio.get_event_loop().time()
-                else:
-                    # サンプルが取得できない場合はデフォルト値を使用
-                    self.base_threshold = -45.0
-                    self.current_threshold = self.base_threshold
-                    self.volume_db_threshold = self.current_threshold
-                    logger.warning(
-                        f"⚠️ 環境音キャリブレーション失敗: "
-                        f"デフォルト閾値={self.base_threshold:.1f}dB"
-                    )
-                    self.calibration_done = True
-
-            def _periodic_adjustment(self, current_db_level):
-                """定期的な閾値調整（環境変化に高速対応）"""
-                audio_difference = current_db_level - self.current_threshold
-                
-                if audio_difference > 3.0:
-                    # 音量が高い環境：段階的に調整
-                    if audio_difference > 10.0:
-                        adjustment = 6.0
-                    elif audio_difference > 7.0:
-                        adjustment = 4.0
-                    else:
-                        adjustment = 2.0
-                        
-                    old_threshold = self.current_threshold
-                    self.current_threshold = self.current_threshold + adjustment
-                    self._update_threshold_properties()
-                    logger.info(
-                        f"🔊 閾値調整: {old_threshold:.1f}→{self.current_threshold:.1f}dB "
-                        f"(+{adjustment:.1f})"
-                    )
-
-                elif audio_difference < -3.0:
-                    # 音量が低い環境：感度を上げる（静かになった時の高速対応）
-                    if audio_difference < -15.0:
-                        adjustment = -8.0
-                    elif audio_difference < -10.0:
-                        adjustment = -5.0
-                    elif audio_difference < -6.0:
-                        adjustment = -3.0
-                    else:
-                        adjustment = -2.0
-                        
-                    old_threshold = self.current_threshold
-                    self.current_threshold = self.current_threshold + adjustment
-                    self._update_threshold_properties()
-                    logger.info(
-                        f"🔊 閾値調整: {old_threshold:.1f}→{self.current_threshold:.1f}dB "
-                        f"({adjustment:.1f})"
-                    )
-
-            def handle_recording_event(self, event_type: str):
-                """録音イベントに基づいて閾値を調整"""
-                if not self.calibration_done:
-                    return  # キャリブレーション完了まで調整しない
-
-                if event_type == "too_long":
-                    self.too_long_count += 1
-                    if self.too_long_count >= 1:  # 1回目から即座に調整
-                        # 閾値を大幅に上げて感度を下げる（無音を検出しやすくする）
-                        old_threshold = self.current_threshold
-                        self.current_threshold = self.current_threshold + 8.0  # さらに大幅に調整
-                        
-                        # StandardSpeechDetectorの実際のプロパティを更新
-                        self._update_threshold_properties()
-                            
-                        logger.info(
-                            f"🔊 緊急調整: {old_threshold:.1f}→{self.current_threshold:.1f}dB "
-                            f"(感度ダウン)"
-                        )
-                        self.too_long_count = 0
-                        self.success_count = 0
-
-                elif event_type == "success":
-                    self.success_count += 1
-                    if self.success_count >= 8:
-                        # 安定している場合は少し感度を上げる
-                        old_threshold = self.current_threshold
-                        self.current_threshold = self.current_threshold - 1.0
-                        self._update_threshold_properties()
-                        logger.info(
-                            f"🔊 微調整: {old_threshold:.1f}→{self.current_threshold:.1f}dB "
-                            f"(感度アップ)"
-                        )
-                        self.success_count = 0
-
-                elif event_type == "too_short":
-                    # 音声が短すぎる場合は感度を上げる
-                    old_threshold = self.current_threshold
-                    self.current_threshold = self.current_threshold - 2.0
-                    self._update_threshold_properties()
-                    logger.info(
-                        f"🔊 短音声対応: {old_threshold:.1f}→{self.current_threshold:.1f}dB"
-                    )
-
-            async def calibrate_environment(self, audio_stream, duration=5.0):
-                """環境ノイズレベルを測定して基準閾値を設定"""
-                logger.info("🎤 環境音のキャリブレーションを開始...")
-                noise_levels = []
-                start_time = asyncio.get_event_loop().time()
-
-                async for chunk in audio_stream:
-                    if asyncio.get_event_loop().time() - start_time > duration:
-                        break
-                    # 音量レベルを計算（実際の実装はAIAvatarKitの内部処理に依存）
-                    # ここでは仮の値を使用
-                    noise_levels.append(-45.0)  # 仮の値
-
-                if noise_levels:
-                    # 90パーセンタイルをノイズフロアとして使用
-                    sorted_levels = sorted(noise_levels)
-                    percentile_90_index = int(len(sorted_levels) * 0.9)
-                    noise_floor = sorted_levels[percentile_90_index]
-                    self.base_threshold = noise_floor + 10.0
-                    self.current_threshold = self.base_threshold
-                    self.volume_db_threshold = self.current_threshold
-                    logger.info(
-                        f"🎯 キャリブレーション完了: 基準閾値 = {self.base_threshold:.1f} dB"
-                    )
-                    self.calibration_done = True
-
-            async def start_periodic_adjustment_task(self):
-                """独立した定期調整タスクを開始"""
-                logger.info("🔄 定期調整タスクを開始（5秒間隔）")
-                while True:
-                    try:
-                        await asyncio.sleep(self.adjustment_interval)
-                        
-                        if self.calibration_done:
-                            # 仮の環境音レベルを生成（実環境では音声レベルを測定）
-                            import random
-
-                            current_db_level = -45.0 + random.uniform(-15, 15)
-                            
-                            self._periodic_adjustment(current_db_level)
-                    except asyncio.CancelledError:
-                        logger.info("🔄 定期調整タスクが停止されました")
-                        break
-                    except Exception as e:
-                        logger.error(f"定期調整タスクでエラー: {e}")
+        # shared_context_idのプロバイダー関数を定義
+        def get_shared_context_id():
+            return shared_context_id
 
         vad_instance = SmartVoiceDetector(
+            context_provider=get_shared_context_id,
             # volume_db_thresholdは自動設定されるため指定しない
             silence_duration_threshold=0.5,  # 無音継続時間閾値（秒）
             max_duration=10.0,  # 最大録音時間を10秒に設定
@@ -567,7 +203,6 @@ def create_app(config_dir=None):
             logger.info("STT機能は無効状態で初期化されました（APIで動的に有効化可能）")
     else:
         voice_recorder_instance = DummyVoiceRecorder()
-        logger.warning("STT APIキーが設定されていないため、STT機能は利用できません")
 
     # STSパイプラインを初期化
     sts = STSPipeline(
@@ -686,7 +321,7 @@ def create_app(config_dir=None):
             f"[on_before_llm] has audio_data: {hasattr(request, 'audio_data')} "
             f"(is None: {getattr(request, 'audio_data', None) is None})"
         )
-        
+
         # リクエストオブジェクトの全属性をデバッグ出力
         logger.debug(f"[on_before_llm] request type: {type(request)}")
         logger.debug(
@@ -1179,29 +814,9 @@ def create_app(config_dir=None):
             asyncio.create_task(update_vad_context())
 
             # VADログ監視用のカスタムハンドラーを設定
-            class VADEventHandler(logging.Handler):
-                """VADイベントを検出してSmartVoiceDetectorに通知するハンドラー"""
-
-                def emit(self, record):
-                    if record.name == "aiavatar.sts.vad.standard":
-                        message = record.getMessage()
-                        if "Recording too long" in message:
-                            logger.debug("VADイベント検出: Recording too long")
-                            if hasattr(vad_instance, "handle_recording_event"):
-                                vad_instance.handle_recording_event("too_long")
-                        elif "sec" in message:
-                            # 録音時間を検出して10秒制限をチェック
-                            duration_match = re.search(r"(\d+\.\d+)\s*sec", message)
-                            if duration_match:
-                                duration = float(duration_match.group(1))
-                                if duration >= 8.0:  # 10秒近くになったら調整開始
-                                    logger.info(f"🚨 録音時間が長い: {duration:.1f}秒")
-                                    if hasattr(vad_instance, "handle_recording_event"):
-                                        vad_instance.handle_recording_event("too_long")
-
             # AIAvatarKitのVADロガーにハンドラーを追加
             vad_logger = logging.getLogger("aiavatar.sts.vad.standard")
-            vad_event_handler = VADEventHandler()
+            vad_event_handler = VADEventHandler(vad_instance)
             vad_event_handler.setLevel(logging.INFO)
             vad_logger.addHandler(vad_event_handler)
 
@@ -1231,7 +846,7 @@ def create_app(config_dir=None):
                 """定期的にVADの調整を実行するタスク"""
                 await asyncio.sleep(5.1)  # キャリブレーション完了を待つ
                 logger.debug("⚙️ 定期調整タスク開始")
-                
+
                 while True:
                     try:
                         await asyncio.sleep(10.0)  # 10秒間隔
