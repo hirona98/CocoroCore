@@ -17,6 +17,8 @@ class SmartVoiceDetector(StandardSpeechDetector):
         self,
         context_provider: Optional[Callable[[], str]] = None,
         dock_client=None,
+        auto_adjustment=True,
+        fixed_threshold=-45.0,
         *args,
         **kwargs,
     ):
@@ -24,6 +26,8 @@ class SmartVoiceDetector(StandardSpeechDetector):
         Args:
             context_provider: 共有コンテキストIDを提供する関数
             dock_client: ステータス通知用のDockクライアント
+            auto_adjustment: 自動閾値調整のON/OFF
+            fixed_threshold: 自動調整OFFの時の固定閾値（dB）
         """
         # 初期閾値を-60dBに設定（環境音測定用）
         if "volume_db_threshold" not in kwargs:
@@ -43,6 +47,69 @@ class SmartVoiceDetector(StandardSpeechDetector):
         self.adjustment_interval = 5.0  # 5秒間隔（高速対応）
         self.environment_samples = []
         self.calibration_start_time = None
+
+        # 新しい設定項目
+        self.auto_adjustment_enabled = auto_adjustment
+        self.fixed_threshold = fixed_threshold
+        self.periodic_task = None  # 定期調整タスクの参照
+
+        # 自動調整がOFFの場合は固定閾値を適用
+        if not self.auto_adjustment_enabled:
+            self.current_threshold = self.fixed_threshold
+            self.base_threshold = self.fixed_threshold
+            self.calibration_done = True  # キャリブレーションをスキップ
+            self._update_threshold_properties()
+            logger.info(f"🔧 VAD固定閾値モード: {self.fixed_threshold:.1f}dB")
+
+    def update_settings(self, auto_adjustment: bool, fixed_threshold: float):
+        """VAD設定を更新する
+
+        Args:
+            auto_adjustment: 自動閾値調整のON/OFF
+            fixed_threshold: 自動調整OFFの時の固定閾値（dB）
+        """
+        logger.info(
+            f"🔧 VAD設定更新: auto_adjustment={auto_adjustment}, fixed_threshold={fixed_threshold:.1f}dB"
+        )
+
+        self.auto_adjustment_enabled = auto_adjustment
+        self.fixed_threshold = fixed_threshold
+
+        if not auto_adjustment:
+            # 自動調整OFFの場合は固定閾値を適用
+            self.current_threshold = fixed_threshold
+            self.base_threshold = fixed_threshold
+            self.calibration_done = True
+            self._update_threshold_properties()
+            logger.info(f"🔧 VAD固定閾値モードに変更: {fixed_threshold:.1f}dB")
+
+            # 定期調整タスクを停止
+            self.stop_periodic_adjustment_task()
+
+            # 自動調整機能を停止するためのフラグを設定
+            if self.dock_client:
+                asyncio.create_task(
+                    self.dock_client.send_status_update(
+                        f"VAD固定閾値モード: {fixed_threshold:.1f}dB",
+                        status_type="microphone_updated",
+                    )
+                )
+        else:
+            # 自動調整ONの場合はキャリブレーションを再開
+            self.calibration_done = False
+            self.calibration_start_time = None
+            self.environment_samples = []
+            logger.info("🔧 VAD自動調整モードに変更")
+
+            # 定期調整タスクを再開
+            asyncio.create_task(self.start_periodic_adjustment_task())
+
+            if self.dock_client:
+                asyncio.create_task(
+                    self.dock_client.send_status_update(
+                        "VAD自動調整モード", status_type="microphone_updated"
+                    )
+                )
 
     def get_session_data(self, session_id, key):
         """セッションデータを取得（共有コンテキストIDに対応）"""
@@ -79,6 +146,13 @@ class SmartVoiceDetector(StandardSpeechDetector):
 
     def start_environment_calibration(self):
         """環境音キャリブレーションを開始"""
+        # 自動調整が無効の場合はキャリブレーションをスキップ
+        if not self.auto_adjustment_enabled:
+            logger.info(
+                f"🔧 VAD自動調整無効のため、キャリブレーションをスキップ（固定閾値: {self.fixed_threshold:.1f}dB）"
+            )
+            return
+
         if not self.calibration_done:
             self.calibration_start_time = asyncio.get_event_loop().time()
             self.environment_samples = []
@@ -111,9 +185,10 @@ class SmartVoiceDetector(StandardSpeechDetector):
                 # 5秒経過：キャリブレーション完了
                 self._complete_calibration()
 
-        # 定期調整
+        # 定期調整（自動調整が有効な場合のみ）
         if (
-            self.calibration_done
+            self.auto_adjustment_enabled
+            and self.calibration_done
             and (current_time - self.last_adjustment_time) >= self.adjustment_interval
         ):
             self._periodic_adjustment(db_level)
@@ -215,6 +290,10 @@ class SmartVoiceDetector(StandardSpeechDetector):
 
     def handle_recording_event(self, event_type: str):
         """録音イベントに基づいて閾値を調整"""
+        # 自動調整が無効の場合は調整しない
+        if not self.auto_adjustment_enabled:
+            return
+
         if not self.calibration_done:
             return  # キャリブレーション完了まで調整しない
 
@@ -279,21 +358,37 @@ class SmartVoiceDetector(StandardSpeechDetector):
 
     async def start_periodic_adjustment_task(self):
         """独立した定期調整タスクを開始"""
+        if self.periodic_task and not self.periodic_task.done():
+            logger.info("🔄 定期調整タスクは既に実行中です")
+            return
+
         logger.info("🔄 定期調整タスクを開始（5秒間隔）")
-        while True:
-            try:
-                await asyncio.sleep(self.adjustment_interval)
 
-                if self.calibration_done:
-                    # 仮の環境音レベルを生成（実環境では音声レベルを測定）
-                    current_db_level = -45.0 + random.uniform(-15, 15)
+        async def periodic_adjustment_loop():
+            while True:
+                try:
+                    await asyncio.sleep(self.adjustment_interval)
 
-                    self._periodic_adjustment(current_db_level)
-            except asyncio.CancelledError:
-                logger.info("🔄 定期調整タスクが停止されました")
-                break
-            except Exception as e:
-                logger.error(f"定期調整タスクでエラー: {e}")
+                    # 自動調整が有効で、キャリブレーションが完了している場合のみ調整
+                    if self.auto_adjustment_enabled and self.calibration_done:
+                        # 仮の環境音レベルを生成（実環境では音声レベルを測定）
+                        current_db_level = -45.0 + random.uniform(-15, 15)
+
+                        self._periodic_adjustment(current_db_level)
+                except asyncio.CancelledError:
+                    logger.info("🔄 定期調整タスクが停止されました")
+                    break
+                except Exception as e:
+                    logger.error(f"定期調整タスクでエラー: {e}")
+
+        self.periodic_task = asyncio.create_task(periodic_adjustment_loop())
+
+    def stop_periodic_adjustment_task(self):
+        """定期調整タスクを停止"""
+        if self.periodic_task and not self.periodic_task.done():
+            self.periodic_task.cancel()
+            logger.info("🔄 定期調整タスクを停止しました")
+            self.periodic_task = None
 
 
 class VADEventHandler(logging.Handler):

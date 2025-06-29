@@ -145,6 +145,11 @@ def create_app(config_dir=None):
     stt_api_key = current_char.get("sttApiKey", "")
     stt_language = current_char.get("sttLanguage", "ja")  # OpenAI用の言語設定
 
+    # VAD（音声活動検出）設定
+    microphone_settings = config.get("microphoneSettings", {})
+    vad_auto_adjustment = microphone_settings.get("autoAdjustment", True)  # デフォルトは自動調整ON
+    vad_threshold = microphone_settings.get("inputThreshold", -45.0)  # デフォルト閾値は-45dB
+
     # STTインスタンスの初期化（APIキーがあれば常に作成）
     stt_instance = None
     voice_recorder_instance = None
@@ -183,6 +188,8 @@ def create_app(config_dir=None):
         vad_instance = SmartVoiceDetector(
             context_provider=get_shared_context_id,
             dock_client=cocoro_dock_client,
+            auto_adjustment=vad_auto_adjustment,  # 設定ファイルから読み込み
+            fixed_threshold=vad_threshold,  # 設定ファイルから読み込み
             # volume_db_thresholdは自動設定されるため指定しない
             silence_duration_threshold=0.5,  # 無音継続時間閾値（秒）
             max_duration=10.0,  # 最大録音時間を10秒に設定
@@ -620,9 +627,15 @@ def create_app(config_dir=None):
     # アプリケーション起動時イベント：VAD定期調整タスクを開始
     @app.on_event("startup")
     async def startup_event():
-        if vad_instance and hasattr(vad_instance, "start_periodic_adjustment_task"):
+        if (
+            vad_instance
+            and hasattr(vad_instance, "start_periodic_adjustment_task")
+            and vad_auto_adjustment
+        ):
             asyncio.create_task(vad_instance.start_periodic_adjustment_task())
             logger.info("🔄 VAD定期調整タスクを開始しました")
+        elif vad_instance and not vad_auto_adjustment:
+            logger.info("🔧 VAD自動調整無効のため、定期調整タスクはスキップしました")
 
     # STSパイプラインの_process_text_requestメソッドをオーバーライド
     if hasattr(sts, "_process_text_request"):
@@ -737,6 +750,40 @@ def create_app(config_dir=None):
                         "message": "STT is already disabled",
                         "timestamp": datetime.now().isoformat(),
                     }
+        elif command == "microphoneControl":
+            # マイクロフォン設定制御
+            try:
+                auto_adjustment = params.get("autoAdjustment", True)
+                input_threshold = params.get("inputThreshold", -45.0)
+
+                logger.info(
+                    f"マイクロフォン制御コマンド: autoAdjustment={auto_adjustment}, inputThreshold={input_threshold:.1f}dB"
+                )
+
+                # VADインスタンスに設定を反映
+                if vad_instance and hasattr(vad_instance, "update_settings"):
+                    vad_instance.update_settings(auto_adjustment, input_threshold)
+                    return {
+                        "status": "success",
+                        "message": "Microphone settings updated",
+                        "autoAdjustment": auto_adjustment,
+                        "inputThreshold": input_threshold,
+                        "timestamp": datetime.now().isoformat(),
+                    }
+                else:
+                    logger.warning("VADインスタンスが利用できません")
+                    return {
+                        "status": "error",
+                        "message": "VAD instance is not available",
+                        "timestamp": datetime.now().isoformat(),
+                    }
+            except Exception as e:
+                logger.error(f"マイクロフォン設定更新エラー: {e}")
+                return {
+                    "status": "error",
+                    "message": f"Microphone settings update error: {str(e)}",
+                    "timestamp": datetime.now().isoformat(),
+                }
         else:
             return {
                 "status": "error",
