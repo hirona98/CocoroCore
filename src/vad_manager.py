@@ -13,10 +13,17 @@ logger = logging.getLogger(__name__)
 class SmartVoiceDetector(StandardSpeechDetector):
     """環境に応じて自動的に音量閾値を調節するVAD"""
 
-    def __init__(self, context_provider: Optional[Callable[[], str]] = None, *args, **kwargs):
+    def __init__(
+        self,
+        context_provider: Optional[Callable[[], str]] = None,
+        dock_client=None,
+        *args,
+        **kwargs,
+    ):
         """
         Args:
             context_provider: 共有コンテキストIDを提供する関数
+            dock_client: ステータス通知用のDockクライアント
         """
         # 初期閾値を-60dBに設定（環境音測定用）
         if "volume_db_threshold" not in kwargs:
@@ -24,6 +31,7 @@ class SmartVoiceDetector(StandardSpeechDetector):
         super().__init__(*args, **kwargs)
 
         self.context_provider = context_provider
+        self.dock_client = dock_client
         self.initial_threshold = kwargs.get("volume_db_threshold", -60.0)
         self.base_threshold = self.initial_threshold
         self.current_threshold = self.initial_threshold
@@ -76,6 +84,14 @@ class SmartVoiceDetector(StandardSpeechDetector):
             self.environment_samples = []
             logger.info("🎤 環境音キャリブレーション開始（5秒間）")
 
+            # ステータス通知を送信
+            if self.dock_client:
+                asyncio.create_task(
+                    self.dock_client.send_status_update(
+                        "環境音キャリブレーション開始", status_type="voice_calibration"
+                    )
+                )
+
     def process_audio_sample(self, audio_data):
         """音声サンプルを処理（環境音測定とリアルタイム調整）"""
         current_time = asyncio.get_event_loop().time()
@@ -126,6 +142,15 @@ class SmartVoiceDetector(StandardSpeechDetector):
                 f"(中央値={percentile_50:.1f}dB+5dB)"
             )
 
+            # キャリブレーション完了のステータス通知を送信
+            if self.dock_client:
+                asyncio.create_task(
+                    self.dock_client.send_status_update(
+                        f"環境音キャリブレーション完了 (基準閾値: {self.base_threshold:.1f}dB)",
+                        status_type="voice_calibration_complete",
+                    )
+                )
+
             self.calibration_done = True
             self.last_adjustment_time = asyncio.get_event_loop().time()
         else:
@@ -136,6 +161,16 @@ class SmartVoiceDetector(StandardSpeechDetector):
             logger.warning(
                 f"⚠️ 環境音キャリブレーション失敗: デフォルト閾値={self.base_threshold:.1f}dB"
             )
+
+            # キャリブレーション失敗のステータス通知を送信
+            if self.dock_client:
+                asyncio.create_task(
+                    self.dock_client.send_status_update(
+                        f"環境音キャリブレーション失敗 (デフォルト閾値: {self.base_threshold:.1f}dB)",
+                        status_type="voice_calibration_failed",
+                    )
+                )
+
             self.calibration_done = True
 
     def _periodic_adjustment(self, current_db_level):

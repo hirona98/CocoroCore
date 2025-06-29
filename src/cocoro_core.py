@@ -182,6 +182,7 @@ def create_app(config_dir=None):
 
         vad_instance = SmartVoiceDetector(
             context_provider=get_shared_context_id,
+            dock_client=cocoro_dock_client,
             # volume_db_thresholdは自動設定されるため指定しない
             silence_duration_threshold=0.5,  # 無音継続時間閾値（秒）
             max_duration=10.0,  # 最大録音時間を10秒に設定
