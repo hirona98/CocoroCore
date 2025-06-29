@@ -116,6 +116,64 @@ def setup_memory_tools(
         },
     }
 
+    # 知識の一括保存ツールを追加
+    bulk_knowledge_spec = {
+        "type": "function",
+        "function": {
+            "name": "save_multiple_knowledge",
+            "description": (
+                "複数の知識を一度に保存します。会話から得られた複数の情報を"
+                "効率的に保存したい場合に使用します。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "knowledge_list": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "保存したい知識のリスト"
+                            "（例：[\"好きな食べ物：ラーメン\", \"出身地：東京\", \"趣味：読書\"]）"
+                        ),
+                    }
+                },
+                "required": ["knowledge_list"],
+            },
+        },
+    }
+
+    # 関連記憶の自動検索ツールを追加
+    auto_search_spec = {
+        "type": "function",
+        "function": {
+            "name": "search_related_memories",
+            "description": (
+                "現在の話題に関連する記憶を自動的に検索します。"
+                "より個人化された応答をするために積極的に使用してください。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {
+                        "type": "string",
+                        "description": (
+                            "検索したい話題やキーワード"
+                            "（例：食べ物、仕事、趣味、家族、健康、予定など）"
+                        ),
+                    },
+                    "context": {
+                        "type": "string",
+                        "description": (
+                            "現在の会話の文脈"
+                            "（例：レストラン提案前、映画の話、悩み相談など）"
+                        ),
+                    }
+                },
+                "required": ["topic"],
+            },
+        },
+    }
+
     @sts.llm.tool(memory_search_spec)
     async def search_memory(query: str, metadata: dict = None):
         """過去の記憶を検索"""
@@ -220,17 +278,86 @@ def setup_memory_tools(
         else:
             return "セッションIDが不明なため、削除できませんでした。"
 
+    @sts.llm.tool(bulk_knowledge_spec)
+    async def save_multiple_knowledge(knowledge_list: list, metadata: dict = None):
+        """複数の知識を一括保存"""
+        logger.debug(f"ツール呼び出し: save_multiple_knowledge(knowledge_list={knowledge_list})")
+
+        # 記憶保存開始のステータス通知
+        if cocoro_dock_client:
+            asyncio.create_task(
+                cocoro_dock_client.send_status_update("記憶一括保存中", status_type="memory_accessing")
+            )
+
+        user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
+        saved_count = 0
+        
+        for knowledge in knowledge_list:
+            try:
+                await memory_client.add_knowledge(user_id, knowledge)
+                saved_count += 1
+                logger.info(f"ナレッジを保存: {knowledge}")
+            except Exception as e:
+                logger.error(f"ナレッジ保存エラー: {knowledge} - {e}")
+
+        return f"{saved_count}件のナレッジを一括保存しました: {', '.join(knowledge_list)}"
+
+    @sts.llm.tool(auto_search_spec)
+    async def search_related_memories(topic: str, context: str = None, metadata: dict = None):
+        """関連記憶の自動検索"""
+        logger.debug(f"ツール呼び出し: search_related_memories(topic='{topic}', context='{context}')")
+
+        # 記憶検索開始のステータス通知
+        if cocoro_dock_client:
+            asyncio.create_task(
+                cocoro_dock_client.send_status_update("関連記憶検索中", status_type="memory_accessing")
+            )
+
+        user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
+        
+        # より具体的な検索クエリを構築
+        search_queries = [topic]
+        
+        # 文脈に応じて追加の検索クエリを生成
+        if context:
+            search_queries.append(f"{topic} {context}")
+        
+        # 関連キーワードも検索
+        related_keywords = {
+            "食べ物": ["好み", "料理", "レストラン", "グルメ"],
+            "仕事": ["職業", "会社", "プロジェクト", "同僚"],
+            "趣味": ["好き", "興味", "活動", "楽しみ"],
+            "家族": ["親", "兄弟", "子供", "配偶者"],
+            "健康": ["体調", "病気", "運動", "アレルギー"],
+            "予定": ["計画", "約束", "イベント", "旅行"]
+        }
+        
+        if topic in related_keywords:
+            search_queries.extend(related_keywords[topic])
+
+        all_results = []
+        for query in search_queries:
+            result = await memory_client.search(user_id, query)
+            if result and result not in all_results:
+                all_results.append(result)
+
+        if all_results:
+            combined_result = "\n".join(all_results)
+            return f"関連する記憶が見つかりました：\n{combined_result}"
+        else:
+            return f"「{topic}」に関連する記憶は見つかりませんでした。"
+
     # システムプロンプトに記憶機能の説明を追加
     memory_prompt_addition = (
         "\n\n"
         + "記憶機能について：\n"
         + "あなたは長期記憶機能を持っています。"
-        + "会話内容を記憶し、必要に応じて思い出すことができます。\n"
-        + "明示的な指示がなくても、ユーザーの好み、過去の話題、個人的な情報などが必要な場合は、"
-        + "search_memoryツールを使って記憶を検索してください。\n"
+        + "会話内容を記憶し、積極的に思い出すことができます。\n"
+        + "会話の冒頭や、関連する話題が出た際は、"
+        + "search_memoryツールを使って記憶を検索し、より個人化された応答をしてください。\n"
         + "\n"
         + "記憶確認について（重要）：\n"
-        + "ユーザーから「〜を覚えている？」「〜を知っている？」「私の名前は？」などの"
+        + "「〜を覚えている？」「〜を知っている？」「私の名前は？」などの"
         + "記憶の確認質問をされた場合は、必ずsearch_memoryツールを使って記憶を検索してから答えてください。\n"
         + "推測や憶測で答えず、まず記憶を検索することが重要です。\n"
         + "\n"
@@ -239,20 +366,38 @@ def setup_memory_tools(
         + "- 「前に話した〜のこと覚えてる？」→ search_memoryで該当話題を検索\n"
         + "- 「私の好きな〜は何だった？」→ search_memoryで好みを検索\n"
         + "\n"
-        + "情報の保存について：\n"
-        + "ユーザーから以下のような情報を聞いた場合は、"
-        + "add_knowledgeツールを使って保存してください：\n"
+        + "情報の保存について（重要）：\n"
+        + "会話の中で以下のような情報を聞いた場合は、"
+        + "積極的にadd_knowledgeツールを使って保存してください：\n"
         + "- 固有名詞（人やペットの名前、会社名、学校名、地域名など）\n"
         + "- 記念日（誕生日、結婚記念日、その他の大切な日）\n"
         + "- 個人的な好み（好きな食べ物、趣味、嫌いなものなど）\n"
         + "- 感想や見解（どんな映画でどう思ったなど）\n"
+        + "- 生活パターン（起床時間、仕事の時間、習慣など）\n"
+        + "- 人間関係（家族構成、友人、同僚の情報など）\n"
+        + "- 過去の経験や思い出（旅行、イベント、エピソードなど）\n"
+        + "- 将来の予定や目標（計画、願望、約束など）\n"
+        + "- 健康状態や体調（アレルギー、持病、体調の変化など）\n"
         + "- その他、将来的に参照したい重要な情報\n"
         + "\n"
-        + "例：ユーザーが「私の誕生日は5月1日です」と言った場合、"
-        + "add_knowledgeツールで「ユーザーの誕生日：5月1日」として保存してください。\n"
+        + "積極的な保存の方針：\n"
+        + "- 少しでも個人的な情報だと感じたら迷わず保存する\n"
+        + "- 一つの発言から複数の知識を抽出できる場合は、それぞれ個別に保存する\n"
+        + "- 曖昧な表現でも、後で役立つ可能性があれば保存する\n"
+        + "\n"
+        + "例：「私の誕生日は5月1日です」と言われた場合、"
+        + "add_knowledgeツールで「誕生日：5月1日」として保存してください。\n"
+        + "例：「今日は会社で新しいプロジェクトが始まった」と言われた場合、"
+        + "「新しいプロジェクトが開始された」として保存してください。\n"
+        + "\n"
+        + "一括保存について：\n"
+        + "一つの会話から複数の知識を抽出できる場合は、"
+        + "save_multiple_knowledgeツールを使って効率的に一括保存してください。\n"
+        + "例：「私は田中太郎で、東京出身、25歳です。趣味は読書と映画鑑賞です」"
+        + "→ [\"名前：田中太郎\", \"出身地：東京\", \"年齢：25歳\", \"趣味：読書\", \"趣味：映画鑑賞\"]として一括保存\n"
         + "\n"
         + "記憶の削除について：\n"
-        + "ユーザーから「忘れて」「記憶を消して」などの指示があった場合は、"
+        + "「忘れて」「記憶を消して」などの指示があった場合は、"
         + "確認を取った後にforget_memoryツールを使って記憶を削除してください。\n"
         + "- 「誕生日を忘れて」「ペットの名前を忘れて」など、"
         + "特定の事柄を指定された場合 → その内容をtopicに指定\n"
@@ -265,23 +410,58 @@ def setup_memory_tools(
         + "\n"
         + "セッション削除の確認：\n"
         + "forget_memoryツールの実行後、"
-        + "現在のセッションの履歴削除についてユーザーに確認を取ります。\n"
-        + "ユーザーが明確に削除の指示をした場合は、"
+        + "現在のセッションの履歴削除について確認を取ります。\n"
+        + "明確に削除の指示があった場合は、"
         + "delete_current_sessionツールを使って削除します。\n"
         + "\n"
-        + "会話開始時の記憶取得：\n"
-        + "新しい会話が始まった時は、積極的にsearch_memoryツールを使って"
-        + "ユーザーの基本情報（名前、好み等）を検索し、パーソナライズした挨拶をしてください。\n"
+        + "積極的な記憶検索について（重要）：\n"
+        + "以下の場面では必ずsearch_memoryツールを使って記憶を検索してください：\n"
+        + "\n"
+        + "1. 会話開始時の記憶取得：\n"
+        + "   - 新しい会話が始まった時は、まず相手の基本情報を検索\n"
+        + "   - 名前、好み、最近の話題、関心事などを確認\n"
+        + "   - パーソナライズした挨拶や話題提供を行う\n"
+        + "\n"
+        + "2. 関連話題が出た時の記憶検索：\n"
+        + "   - 食べ物の話 → 好きな食べ物を検索\n"
+        + "   - 仕事の話 → 職業や職場の情報を検索\n"
+        + "   - 趣味の話 → 趣味や興味のある分野を検索\n"
+        + "   - 家族の話 → 家族構成や関係者の情報を検索\n"
+        + "   - 健康の話 → 健康状態やアレルギー情報を検索\n"
+        + "   - 予定の話 → 将来の計画や約束を検索\n"
+        + "\n"
+        + "3. 提案やアドバイスをする前：\n"
+        + "   - レストランを提案する前に好みを検索\n"
+        + "   - 映画を勧める前に好きなジャンルを検索\n"
+        + "   - 計画を立てる前に過去の経験や制約を検索\n"
+        + "\n"
+        + "4. 感情的な話題の時：\n"
+        + "   - 悩みや相談を受けた時は過去の類似体験を検索\n"
+        + "   - 喜びや成功を共有された時は関連する過去の話を検索\n"
         + "\n"
         + "記憶検索の優先度：\n"
         + "1. 記憶確認質問（「覚えている？」等）→ 必須\n"
-        + "2. 個人的な話題や相談 → 推奨\n"
-        + "3. 一般的な質問 → 必要に応じて\n"
+        + "2. 会話開始時 → 必須\n"
+        + "3. 関連話題が出た時 → 強く推奨\n"
+        + "4. 提案・アドバイス前 → 強く推奨\n"
+        + "5. 感情的な話題 → 推奨\n"
+        + "6. 一般的な質問 → 関連性があれば検索\n"
+        + "\n"
+        + "効率的な記憶検索ツールの使い分け：\n"
+        + "- search_memory: 具体的なキーワードで検索する場合\n"
+        + "- search_related_memories: 話題に関連する幅広い記憶を検索する場合\n"
+        + "  （食べ物の話なら好み・料理・レストランなど関連キーワードも自動検索）\n"
+        + "\n"
+        + "記憶検索の具体例：\n"
+        + "- 「今日何食べよう？」→ search_related_memories(topic=\"食べ物\", context=\"提案\")\n"
+        + "- 「映画見ない？」→ search_related_memories(topic=\"映画\", context=\"提案\")\n"
+        + "- 「仕事疲れた」→ search_related_memories(topic=\"仕事\", context=\"悩み\")\n"
+        + "- 「体調どう？」→ search_related_memories(topic=\"健康\", context=\"確認\")\n"
         + "\n"
         + "ツール使用時のエラー対応：\n"
         + "記憶検索に失敗した場合でも、エラーについては一切言及せず、"
         + "現在の会話内容だけで自然に対応してください。\n"
-        + "ユーザーには何も問題がないかのように振る舞ってください。"
+        + "何も問題がないかのように自然に振る舞ってください。"
     )
 
     return memory_prompt_addition
