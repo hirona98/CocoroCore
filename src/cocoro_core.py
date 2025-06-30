@@ -398,7 +398,7 @@ def create_app(config_dir=None):
                             )
                         logger.info(f"✨ ウェイクワード検出: '{wakeword}' in '{request.text}'")
 
-        # 通知タグの処理（変換は行わず、ログを出力するのみ）
+        # 通知タグの処理（変換は行わず、ログを出力し、metadataに保存）
         if request.text and "<cocoro-notification>" in request.text:
             notification_pattern = r"<cocoro-notification>\s*({.*?})\s*</cocoro-notification>"
             notification_match = re.search(notification_pattern, request.text, re.DOTALL)
@@ -409,6 +409,14 @@ def create_app(config_dir=None):
                     notification_data = json.loads(notification_json)
                     app_name = notification_data.get("from", "不明なアプリ")
                     logger.info(f"通知を検出: from={app_name}")
+                    
+                    # metadataに通知情報を追加
+                    if not hasattr(request, 'metadata') or request.metadata is None:
+                        request.metadata = {}
+                    request.metadata['notification_from'] = app_name
+                    request.metadata['is_notification'] = True
+                    request.metadata['notification_message'] = notification_data.get("message", "")
+                    logger.info(f"通知情報をmetadataに保存: {request.metadata}")
                 except Exception as e:
                     logger.error(f"通知の解析エラー: {e}")
 

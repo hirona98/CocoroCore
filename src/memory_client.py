@@ -29,16 +29,20 @@ class ChatMemoryClient:
             return
             
         async with self._queue_lock:
+            # ユーザーメッセージのmetadata（通知情報を含む）
+            user_metadata = {"session_id": request.session_id, "user_id": request.user_id}
+            if hasattr(request, 'metadata') and request.metadata:
+                user_metadata.update(request.metadata)
+            
             self._message_queue.append(
                 {
                     "role": "user",
                     "content": request.text,
-                    "metadata": {
-                        "session_id": request.session_id, 
-                        "user_id": request.user_id
-                    },
+                    "metadata": user_metadata,
                 }
             )
+            
+            # アシスタントの応答は通知情報を含まない
             self._message_queue.append(
                 {
                     "role": "assistant",
