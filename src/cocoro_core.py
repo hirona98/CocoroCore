@@ -85,6 +85,10 @@ def create_app(config_dir=None):
     llm_api_key = env_api_key or current_char.get("apiKey")
     llm_model = current_char.get("llmModel")
     system_prompt = current_char.get("systemPrompt", "あなたは親切なアシスタントです。")
+    
+    # ユーザーID設定を取得
+    user_id = current_char.get("userId", "default_user")
+    logger.info(f"設定から読み込んだユーザーID: {user_id}")
 
     # ポート設定
     port = config.get("cocoroCorePort", 55601)
@@ -295,6 +299,12 @@ def create_app(config_dir=None):
     async def handle_before_llm(request):
         nonlocal shared_context_id
 
+        # user_idを設定ファイルから読み込んだ値に上書き
+        if hasattr(request, 'user_id') and user_id:
+            original_user_id = request.user_id
+            request.user_id = user_id
+            logger.info(f"user_idを設定値に変更: {original_user_id} → {user_id}")
+
         # 音声入力でcontext_idが未設定の場合、共有context_idを設定
         if shared_context_id:
             # テキストチャットか音声入力かを判定
@@ -462,7 +472,7 @@ def create_app(config_dir=None):
                     )
 
         # セッションアクティビティを更新（これは待つ必要がある）
-        await session_manager.update_activity(request.user_id or "default_user", request.session_id)
+        await session_manager.update_activity(request.user_id or user_id, request.session_id)
 
         # 以下の処理をすべて非同期タスクとして起動（待たない）
         async def send_to_external_services():
@@ -474,7 +484,7 @@ def create_app(config_dir=None):
                     # save_historyも非同期で実行
                     asyncio.create_task(
                         memory_client.save_history(
-                            user_id=request.user_id or "default_user",
+                            user_id=request.user_id or user_id,
                             session_id=request.session_id,
                             channel="cocoro_ai",
                         )
@@ -838,8 +848,8 @@ def create_app(config_dir=None):
             )
             logger.info("AudioRecorderを初期化しました")
 
-            # デフォルトユーザーIDとセッションIDを設定
-            default_user_id = "voice_user"
+            # デフォルトユーザーIDとセッションIDを設定（設定ファイルから読み込み）
+            default_user_id = user_id
             # セッションIDの重複を防ぐためにマイクロ秒を追加
             default_session_id = f"voice_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
 
