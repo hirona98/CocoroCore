@@ -5,8 +5,8 @@ build-backend = "setuptools.build_meta"
 [tool.ruff]
 # 対象Pythonバージョン
 target-version = "py310"
-# 行の長さ
-line-length = 100
+# 行の長さ（制限なし）
+line-length = 320
 
 # リンターの設定
 [tool.ruff.lint]
