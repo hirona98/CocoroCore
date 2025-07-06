@@ -197,37 +197,7 @@ class ChatMemoryClient:
             logger.error(f"画像記憶の検索に失敗しました: {e}")
             return None
 
-    async def delete_history(self, user_id: str, session_id: str = None):
-        """指定したユーザーの会話履歴を削除"""
-        try:
-            params = {"user_id": user_id}
-            if session_id:
-                params["session_id"] = session_id
 
-            response = await self.client.delete(
-                f"{self.base_url}/history",
-                params=params,
-            )
-            response.raise_for_status()
-            logger.info(f"履歴を削除しました: user_id={user_id}, session_id={session_id}")
-        except Exception as e:
-            logger.error(f"履歴の削除に失敗しました: {e}")
-
-    async def delete_summary(self, user_id: str, session_id: str = None):
-        """指定したユーザーの要約を削除"""
-        try:
-            params = {"user_id": user_id}
-            if session_id:
-                params["session_id"] = session_id
-
-            response = await self.client.delete(
-                f"{self.base_url}/summary",
-                params=params,
-            )
-            response.raise_for_status()
-            logger.info(f"要約を削除しました: user_id={user_id}, session_id={session_id}")
-        except Exception as e:
-            logger.error(f"要約の削除に失敗しました: {e}")
 
     async def get_knowledge(self, user_id: str):
         """ユーザーの知識を取得"""
@@ -242,21 +212,6 @@ class ChatMemoryClient:
             logger.error(f"ナレッジの取得に失敗しました: {e}")
             return []
 
-    async def delete_knowledge(self, user_id: str, knowledge_id: int = None):
-        """指定したナレッジを削除"""
-        try:
-            params = {"user_id": user_id}
-            if knowledge_id:
-                params["knowledge_id"] = knowledge_id
-
-            response = await self.client.delete(
-                f"{self.base_url}/knowledge",
-                params=params,
-            )
-            response.raise_for_status()
-            logger.info(f"ナレッジを削除しました: knowledge_id={knowledge_id}")
-        except Exception as e:
-            logger.error(f"ナレッジの削除に失敗しました: {e}")
 
     async def close(self):
         """クライアントを閉じる"""

@@ -79,42 +79,7 @@ def setup_memory_tools(
         },
     }
 
-    # 記憶削除ツールを追加
-    forget_memory_spec = {
-        "type": "function",
-        "function": {
-            "name": "forget_memory",
-            "description": (
-                "ユーザーから忘れてほしいと指示された特定の事柄に関する"
-                "記憶（ナレッジ）を削除します。"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "topic": {
-                        "type": "string",
-                        "description": (
-                            "削除したい事柄の内容（例：誕生日、ペットの名前、特定の出来事など）"
-                        ),
-                    }
-                },
-                "required": ["topic"],
-            },
-        },
-    }
 
-    # セッション削除確認ツールを追加
-    delete_session_spec = {
-        "type": "function",
-        "function": {
-            "name": "delete_current_session",
-            "description": "ユーザーが確認した後、現在のセッションの履歴と要約を削除します。",
-            "parameters": {
-                "type": "object",
-                "properties": {},
-            },
-        },
-    }
 
     # 画像記憶検索ツールを追加
     search_image_memories_spec = {
@@ -207,74 +172,7 @@ def setup_memory_tools(
 
         return f"ナレッジを保存しました: {knowledge}"
 
-    @sts.llm.tool(forget_memory_spec)
-    async def forget_memory(topic: str, metadata: dict = None):
-        """特定の事柄に関する記憶を削除"""
-        logger.debug(f"ツール呼び出し: forget_memory(topic='{topic}')")
 
-        # 記憶削除開始のステータス通知
-        if cocoro_dock_client:
-            asyncio.create_task(
-                cocoro_dock_client.send_status_update("記憶削除中", status_type="memory_accessing")
-            )
-
-        user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
-        session_id = metadata.get("session_id") if metadata else None
-
-        # ナレッジから該当する項目を検索して削除
-        knowledge_list = await memory_client.get_knowledge(user_id)
-        deleted_count = 0
-
-        for knowledge_item in knowledge_list:
-            # knowledge_itemが辞書型の場合の処理
-            if isinstance(knowledge_item, dict):
-                knowledge_text = knowledge_item.get("knowledge", "")
-                knowledge_id = knowledge_item.get("id")
-
-                # トピックに関連する内容かチェック（大文字小文字を無視）
-                if topic.lower() in knowledge_text.lower():
-                    await memory_client.delete_knowledge(user_id, knowledge_id)
-                    deleted_count += 1
-                    logger.info(f"削除したナレッジ: {knowledge_text}")
-
-        result_message = ""
-        if deleted_count > 0:
-            result_message = f"「{topic}」に関する{deleted_count}件のナレッジを削除しました。\n"
-        else:
-            result_message = f"「{topic}」に関するナレッジは見つかりませんでした。\n"
-
-        # ヒストリーとサマリーの削除について確認
-        if session_id:
-            result_message += (
-                f"\n現在の会話履歴にも「{topic}」に関する内容が含まれている可能性があります。"
-            )
-            result_message += (
-                "\n直近の会話履歴と要約も削除しますか？"
-                "（「はい」と答えると現在のセッションの履歴が削除されます）"
-            )
-
-        return result_message
-
-    @sts.llm.tool(delete_session_spec)
-    async def delete_current_session(metadata: dict = None):
-        """現在のセッションの履歴と要約を削除"""
-        logger.debug("ツール呼び出し: delete_current_session()")
-
-        # セッション削除開始のステータス通知
-        if cocoro_dock_client:
-            asyncio.create_task(
-                cocoro_dock_client.send_status_update("履歴削除中", status_type="memory_accessing")
-            )
-
-        user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
-        session_id = metadata.get("session_id") if metadata else None
-
-        if session_id:
-            await memory_client.delete_history(user_id, session_id)
-            await memory_client.delete_summary(user_id, session_id)
-            return "現在のセッションの会話履歴と要約を削除しました。"
-        else:
-            return "セッションIDが不明なため、削除できませんでした。"
 
     @sts.llm.tool(search_image_memories_spec)
     async def search_image_memories(query: str, metadata: dict = None):
@@ -369,7 +267,6 @@ def setup_memory_tools(
         + "検索してから回答\n"
         + "- 固有名詞・日付・好み・感想が出現: 即座にadd_knowledgeで保存\n"
         + "- 応答前: 必ずsearch_memoryで関連情報を検索してからパーソナライズした応答\n"
-        + "- 記憶削除指示: 確認後にforget_memoryで削除\n"
         + "- 要約記憶: 要約を保存してと言われたらcreate_summaryで現在の会話を要約保存\n"
     )
 
