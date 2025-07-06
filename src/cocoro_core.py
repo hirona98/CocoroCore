@@ -86,7 +86,7 @@ async def generate_image_description(image_url: str, user_id: str) -> Optional[s
     """画像の説明を生成"""
     try:
         import litellm
-        
+
         # LLMクライアントの設定を取得
         config = load_config()
         character_list = config.get("characterList", [])
@@ -109,30 +109,31 @@ async def generate_image_description(image_url: str, user_id: str) -> Optional[s
             model=model,
             messages=[
                 {
-                    "role": "system", 
-                    "content": ("画像が送られた場合、以下の形式で応答してください：\n\n"
-                              "反応: [キャラクターとしての自然な反応]\n"
-                              "記憶: [この画像の客観的な説明]\n"
-                              "分類: [カテゴリ] / [雰囲気] / [時間帯]\n\n"
-                              "例：\n"
-                              "反応: わあ！素敵な遊園地の写真ですね！観覧車がとても大きくて楽しそうです。\n"
-                              "記憶: 遊園地の風景。大きな観覧車が中央にあり、青空の下で多くの人が楽しんでいる。\n"
-                              "分類: 風景 / 楽しい / 昼\n\n"
-                              "分類の選択肢：\n"
-                              "- カテゴリ: 風景/人物/食事/動物/建物/その他\n"
-                              "- 雰囲気: 明るい/楽しい/静か/賑やか/その他\n"
-                              "- 時間帯: 朝/昼/夕方/夜/不明")
+                    "role": "system",
+                    "content": (
+                        "画像が送られた場合、以下の形式で応答してください：\n\n"
+                        "反応: [キャラクターとしての自然な反応]\n"
+                        "記憶: [この画像の詳細で客観的な説明]\n"
+                        "分類: [カテゴリ] / [雰囲気] / [時間帯]\n\n"
+                        "記憶の説明は簡潔かつ的確に、以下を含めてください：\n"
+                        "- 画像の種類（写真/イラスト/スクリーンショット/図表など）\n"
+                        "- 内容や被写体\n"
+                        "- 色彩や特徴\n"
+                        "- 文字情報があれば記載\n"
+                        "例：\n"
+                        "反応: わあ！素敵な遊園地のイラストですね！観覧車がとても大きくて楽しそうです。\n"
+                        "記憶: 後楽園遊園地を描いたカラーイラスト。中央に白い観覧車と赤いゴンドラ、右側に青黄ストライプのメリーゴーラウンド。青空の下、来園者が散歩している平和な風景。\n"
+                        "分類: 風景 / 楽しい / 昼\n\n"
+                        "分類の選択肢：\n"
+                        "- カテゴリ: 風景/人物/食事/建物/画面（プログラム）/画面（SNS）/画面（ゲーム）/画面（買い物）/画面（鑑賞）/[その他任意の分類]\n"
+                        "- 雰囲気: 明るい/楽しい/悲しい/静か/賑やか/[その他任意の分類]\n"
+                        "- 時間帯: 朝/昼/夕方/夜/不明"
+                    ),
                 },
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "image_url", "image_url": {"url": image_url}},
-                        {"type": "text", "text": "この画像について教えてください。"}
-                    ]
-                }
+                {"role": "user", "content": [{"type": "image_url", "image_url": {"url": image_url}}, {"type": "text", "text": "この画像について教えてください。"}]},
             ],
             api_key=api_key,
-            temperature=0.3
+            temperature=0.3,
         )
         
         full_response = response.choices[0].message.content
