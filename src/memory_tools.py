@@ -39,7 +39,9 @@ def setup_memory_tools(
                 "過去の会話や記憶から情報を検索します。"
                 "ユーザーの好み、過去の話題、個人的な情報などを探す時に使用します。\n"
                 "画像関連の記憶を検索したい場合は、検索語に『画像』『写真』『見せた』"
-                "などのキーワードを含めてください。"
+                "などのキーワードを含めてください。\n"
+                "ユーザーについて保存した情報の全体を知りたい場合は、"
+                "『私について覚えていること』『保存した情報』で検索してください。"
             ),
             "parameters": {
                 "type": "object",
@@ -49,7 +51,8 @@ def setup_memory_tools(
                         "description": (
                             "検索したい内容。例：\n"
                             "- 一般検索: 'ユーザーの好きな食べ物'、'前回話した内容'\n"
-                            "- 画像検索: '画像 遊園地'、'写真 ペット'、'見せた 料理'"
+                            "- 画像検索: '画像 遊園地'、'写真 ペット'、'見せた 料理'\n"
+                            "- 情報一覧: '私について覚えていること'、'保存した情報'"
                         ),
                     }
                 },
@@ -102,21 +105,6 @@ def setup_memory_tools(
         },
     }
 
-    # ナレッジ取得ツールを追加
-    get_knowledge_spec = {
-        "type": "function",
-        "function": {
-            "name": "get_knowledge",
-            "description": (
-                "保存されているユーザーのナレッジ（知識）一覧を取得します。"
-                "ユーザーについて何を覚えているか確認する時に使用します。"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {},
-            },
-        },
-    }
 
     @sts.llm.tool(memory_search_spec)
     async def search_memory(query: str, metadata: dict = None):
@@ -193,33 +181,6 @@ def setup_memory_tools(
                 logger.error(f"要約生成エラー: {e}")
                 return f"要約生成に失敗しました: {str(e)}"
 
-    @sts.llm.tool(get_knowledge_spec)
-    async def get_knowledge(metadata: dict = None):
-        """保存されているナレッジを取得"""
-        logger.debug("ツール呼び出し: get_knowledge()")
-
-        # ナレッジ取得開始のステータス通知
-        if cocoro_dock_client:
-            asyncio.create_task(
-                cocoro_dock_client.send_status_update("ナレッジ取得中", status_type="memory_accessing")
-            )
-
-        user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
-        knowledge_list = await memory_client.get_knowledge(user_id)
-
-        if knowledge_list:
-            # ナレッジを整理して返す
-            formatted_knowledge = []
-            for i, item in enumerate(knowledge_list, 1):
-                if isinstance(item, dict):
-                    knowledge_text = item.get("knowledge", "")
-                    formatted_knowledge.append(f"{i}. {knowledge_text}")
-                else:
-                    formatted_knowledge.append(f"{i}. {item}")
-            
-            return "保存されているナレッジ:\n" + "\n".join(formatted_knowledge)
-        else:
-            return "保存されているナレッジはありません。"
 
     # システムプロンプトに記憶機能の説明を追加
     memory_prompt_addition = (

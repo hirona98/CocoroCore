@@ -177,18 +177,6 @@ class ChatMemoryClient:
 
 
 
-    async def get_knowledge(self, user_id: str):
-        """ユーザーの知識を取得"""
-        try:
-            response = await self.client.get(
-                f"{self.base_url}/knowledge",
-                params={"user_id": user_id},
-            )
-            response.raise_for_status()
-            return response.json()
-        except Exception as e:
-            logger.error(f"ナレッジの取得に失敗しました: {e}")
-            return []
 
 
     async def close(self):
