@@ -34,10 +34,50 @@ class ChatMemoryClient:
             if hasattr(request, 'metadata') and request.metadata:
                 user_metadata.update(request.metadata)
             
+            # 画像説明がある場合は、システムメッセージとして先に追加
+            if user_metadata.get('image_description'):
+                # メタデータから画像情報を構築
+                image_info = user_metadata['image_description']
+                category = user_metadata.get('image_category', '')
+                mood = user_metadata.get('image_mood', '')
+                time = user_metadata.get('image_time', '')
+                
+                # 分類情報があれば追加
+                classification = ""
+                if category or mood or time:
+                    classification = f" (分類: {category}/{mood}/{time})"
+                
+                self._message_queue.append(
+                    {
+                        "role": "system",
+                        "content": f"[画像が共有されました: {image_info}]{classification}",
+                        "metadata": {
+                            "session_id": request.session_id,
+                            "user_id": request.user_id,
+                            "type": "image_description",
+                            "image_category": category,
+                            "image_mood": mood,
+                            "image_time": time
+                        },
+                    }
+                )
+                logger.info(f"画像説明をシステムメッセージとして履歴に追加: {image_info[:30]}... [{category}/{mood}/{time}]")
+            
+            # ユーザーの元の発言を抽出
+            user_original_text = request.text
+            if user_metadata.get('image_description'):
+                # 画像情報が追加されている場合、元の発言部分を抽出
+                # パターン: "[画像を共有しました: ...]\n元の発言" または "[画像を共有しました: ...]" のみ
+                import re
+                pattern = r'^\[画像を共有しました: .+?\](?:\n(.+))?$'
+                match = re.match(pattern, request.text, re.DOTALL)
+                if match:
+                    user_original_text = match.group(1) if match.group(1) else ""
+            
             self._message_queue.append(
                 {
                     "role": "user",
-                    "content": request.text,
+                    "content": user_original_text,
                     "metadata": user_metadata,
                 }
             )
@@ -134,37 +174,30 @@ class ChatMemoryClient:
         except Exception as e:
             logger.error(f"ナレッジの追加に失敗しました: {e}")
 
-    async def delete_history(self, user_id: str, session_id: str = None):
-        """指定したユーザーの会話履歴を削除"""
+    async def search_image_memories(self, user_id: str, query: str, top_k: int = 3) -> Optional[str]:
+        """画像関連の記憶を検索"""
         try:
-            params = {"user_id": user_id}
-            if session_id:
-                params["session_id"] = session_id
-
-            response = await self.client.delete(
-                f"{self.base_url}/history",
-                params=params,
+            # 画像が含まれる履歴/summaryを優先検索
+            image_query = f"画像が共有されました OR 写真 OR 見せた {query}"
+            
+            response = await self.client.post(
+                f"{self.base_url}/search",
+                json={
+                    "user_id": user_id,
+                    "query": image_query,
+                    "top_k": top_k,
+                    "search_content": True,
+                    "include_retrieved_data": False
+                }
             )
             response.raise_for_status()
-            logger.info(f"履歴を削除しました: user_id={user_id}, session_id={session_id}")
+            result = response.json()
+            return result["result"]["answer"]
         except Exception as e:
-            logger.error(f"履歴の削除に失敗しました: {e}")
+            logger.error(f"画像記憶の検索に失敗しました: {e}")
+            return None
 
-    async def delete_summary(self, user_id: str, session_id: str = None):
-        """指定したユーザーの要約を削除"""
-        try:
-            params = {"user_id": user_id}
-            if session_id:
-                params["session_id"] = session_id
 
-            response = await self.client.delete(
-                f"{self.base_url}/summary",
-                params=params,
-            )
-            response.raise_for_status()
-            logger.info(f"要約を削除しました: user_id={user_id}, session_id={session_id}")
-        except Exception as e:
-            logger.error(f"要約の削除に失敗しました: {e}")
 
     async def get_knowledge(self, user_id: str):
         """ユーザーの知識を取得"""
@@ -179,21 +212,6 @@ class ChatMemoryClient:
             logger.error(f"ナレッジの取得に失敗しました: {e}")
             return []
 
-    async def delete_knowledge(self, user_id: str, knowledge_id: int = None):
-        """指定したナレッジを削除"""
-        try:
-            params = {"user_id": user_id}
-            if knowledge_id:
-                params["knowledge_id"] = knowledge_id
-
-            response = await self.client.delete(
-                f"{self.base_url}/knowledge",
-                params=params,
-            )
-            response.raise_for_status()
-            logger.info(f"ナレッジを削除しました: knowledge_id={knowledge_id}")
-        except Exception as e:
-            logger.error(f"ナレッジの削除に失敗しました: {e}")
 
     async def close(self):
         """クライアントを閉じる"""

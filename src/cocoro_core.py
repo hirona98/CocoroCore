@@ -49,6 +49,102 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+
+
+def parse_image_response(response_text: str) -> dict:
+    """画像応答を解析してメタデータを抽出"""
+    result = {
+        "reaction": "",
+        "description": "",
+        "category": "",
+        "mood": "", 
+        "time": ""
+    }
+    
+    lines = response_text.split('\n')
+    for line in lines:
+        line = line.strip()
+        if line.startswith('反応:'):
+            result["reaction"] = line[3:].strip()
+        elif line.startswith('記憶:'):
+            result["description"] = line[3:].strip()
+        elif line.startswith('分類:'):
+            # メタデータを解析: [カテゴリ] / [雰囲気] / [時間帯]
+            metadata_text = line[3:].strip()
+            parts = [p.strip() for p in metadata_text.split('/')]
+            if len(parts) >= 1:
+                result["category"] = parts[0]
+            if len(parts) >= 2:
+                result["mood"] = parts[1]
+            if len(parts) >= 3:
+                result["time"] = parts[2]
+    
+    return result
+
+
+async def generate_image_description(image_url: str, user_id: str) -> Optional[str]:
+    """画像の説明を生成"""
+    try:
+        import litellm
+
+        # LLMクライアントの設定を取得
+        config = load_config()
+        character_list = config.get("characterList", [])
+        current_char_index = config.get("currentCharacterIndex", 0)
+        
+        if character_list and current_char_index < len(character_list):
+            current_char = character_list[current_char_index]
+            api_key = current_char.get("apiKey")
+            model = current_char.get("llmModel", "openai/gpt-4o-mini")
+        else:
+            api_key = os.getenv("OPENAI_API_KEY")
+            model = "openai/gpt-4o-mini"
+            
+        if not api_key:
+            logger.warning("APIキーが設定されていないため、画像説明の生成をスキップします")
+            return None
+            
+        # Vision APIで画像の反応と説明を生成
+        response = await litellm.acompletion(
+            model=model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "画像が送られた場合、以下の形式で応答してください：\n\n"
+                        "反応: [キャラクターとしての自然な反応]\n"
+                        "記憶: [この画像の詳細で客観的な説明]\n"
+                        "分類: [カテゴリ] / [雰囲気] / [時間帯]\n\n"
+                        "記憶の説明は簡潔かつ的確に、以下を含めてください：\n"
+                        "- 画像の種類（写真/イラスト/スクリーンショット/図表など）\n"
+                        "- 内容や被写体\n"
+                        "- 色彩や特徴\n"
+                        "- 文字情報があれば記載\n"
+                        "例：\n"
+                        "反応: わあ！素敵な遊園地のイラストですね！観覧車がとても大きくて楽しそうです。\n"
+                        "記憶: 後楽園遊園地を描いたカラーイラスト。中央に白い観覧車と赤いゴンドラ、右側に青黄ストライプのメリーゴーラウンド。青空の下、来園者が散歩している平和な風景。\n"
+                        "分類: 風景 / 楽しい / 昼\n\n"
+                        "分類の選択肢：\n"
+                        "- カテゴリ: 風景/人物/食事/建物/画面（プログラム）/画面（SNS）/画面（ゲーム）/画面（買い物）/画面（鑑賞）/[その他任意の分類]\n"
+                        "- 雰囲気: 明るい/楽しい/悲しい/静か/賑やか/[その他任意の分類]\n"
+                        "- 時間帯: 朝/昼/夕方/夜/不明"
+                    ),
+                },
+                {"role": "user", "content": [{"type": "image_url", "image_url": {"url": image_url}}, {"type": "text", "text": "この画像について教えてください。"}]},
+            ],
+            api_key=api_key,
+            temperature=0.3,
+        )
+        
+        full_response = response.choices[0].message.content
+        logger.info(f"画像応答を生成しました: {full_response[:50]}...")
+        return full_response
+        
+    except Exception as e:
+        logger.error(f"画像説明の生成に失敗しました: {e}")
+        return None
+
+
 def create_app(config_dir=None):
     """CocoroCore アプリケーションを作成する関数
 
@@ -424,6 +520,39 @@ def create_app(config_dir=None):
         if request.text and "<cocoro-desktop-monitoring>" in request.text:
             logger.info("デスクトップモニタリング画像タグを検出（独り言モード）")
 
+        # 画像がある場合は応答を生成してパース
+        if request.files and len(request.files) > 0:
+            try:
+                # 画像の応答（反応+記憶+分類）を生成
+                image_response = await generate_image_description(
+                    request.files[0]["url"], 
+                    request.user_id or "default_user"
+                )
+                
+                if image_response:
+                    # 応答をパースして各要素を抽出
+                    parsed_data = parse_image_response(image_response)
+                    
+                    # メタデータに情報を保存
+                    if not hasattr(request, 'metadata') or request.metadata is None:
+                        request.metadata = {}
+                    request.metadata['image_description'] = parsed_data.get('description', '')
+                    request.metadata['image_category'] = parsed_data.get('category', '')
+                    request.metadata['image_mood'] = parsed_data.get('mood', '')
+                    request.metadata['image_time'] = parsed_data.get('time', '')
+                    
+                    # ユーザーのメッセージに画像情報を追加
+                    original_text = request.text or ""
+                    description = parsed_data.get('description', '画像が共有されました')
+                    if original_text:
+                        request.text = f"[画像を共有しました: {description}]\n{original_text}"
+                    else:
+                        request.text = f"[画像を共有しました: {description}]"
+                    
+                    logger.info(f"画像情報をリクエストに追加: カテゴリ={parsed_data.get('category')}, 雰囲気={parsed_data.get('mood')}")
+            except Exception as e:
+                logger.error(f"画像処理に失敗しました: {e}")
+
         # LLM送信開始のステータス通知と定期ステータス送信の開始
         if cocoro_dock_client and request.text:
             # 初回のステータス通知
@@ -541,6 +670,7 @@ def create_app(config_dir=None):
 
         # 外部サービスへの送信を非同期で開始（待たずに即座にリターン）
         asyncio.create_task(send_to_external_services())
+        
 
     # 通知処理のガイドラインをシステムプロンプトに追加
     notification_prompt = (
