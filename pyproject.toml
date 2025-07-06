@@ -18,6 +18,7 @@ line-length = 320
 select = ["E", "F", "I", "S"]
 ignore = [
   "D",    # ドキュメント関連
+  "F401", # import but unused
   "I001", # isortの設定
   "S311", # suspicious-random-choice
   "S603",
