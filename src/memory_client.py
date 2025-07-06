@@ -136,7 +136,7 @@ class ChatMemoryClient:
                     "query": query,
                     "top_k": top_k,
                     "search_content": True,
-                    "include_retrieved_data": False,
+                    "include_retrieved_data": True,
                 },
             )
             response.raise_for_status()
