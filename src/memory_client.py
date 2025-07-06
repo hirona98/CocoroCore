@@ -34,6 +34,35 @@ class ChatMemoryClient:
             if hasattr(request, 'metadata') and request.metadata:
                 user_metadata.update(request.metadata)
             
+            # 画像説明がある場合は、システムメッセージとして先に追加
+            if user_metadata.get('image_description'):
+                # メタデータから画像情報を構築
+                image_info = user_metadata['image_description']
+                category = user_metadata.get('image_category', '')
+                mood = user_metadata.get('image_mood', '')
+                time = user_metadata.get('image_time', '')
+                
+                # 分類情報があれば追加
+                classification = ""
+                if category or mood or time:
+                    classification = f" (分類: {category}/{mood}/{time})"
+                
+                self._message_queue.append(
+                    {
+                        "role": "system",
+                        "content": f"[画像が共有されました: {image_info}]{classification}",
+                        "metadata": {
+                            "session_id": request.session_id,
+                            "user_id": request.user_id,
+                            "type": "image_description",
+                            "image_category": category,
+                            "image_mood": mood,
+                            "image_time": time
+                        },
+                    }
+                )
+                logger.info(f"画像説明をシステムメッセージとして履歴に追加: {image_info[:30]}... [{category}/{mood}/{time}]")
+            
             self._message_queue.append(
                 {
                     "role": "user",
@@ -133,6 +162,29 @@ class ChatMemoryClient:
             logger.info(f"ナレッジを追加しました: {knowledge}")
         except Exception as e:
             logger.error(f"ナレッジの追加に失敗しました: {e}")
+
+    async def search_image_memories(self, user_id: str, query: str, top_k: int = 3) -> Optional[str]:
+        """画像関連の記憶を検索"""
+        try:
+            # 画像が含まれる履歴/summaryを優先検索
+            image_query = f"画像が共有されました OR 写真 OR 見せた {query}"
+            
+            response = await self.client.post(
+                f"{self.base_url}/search",
+                json={
+                    "user_id": user_id,
+                    "query": image_query,
+                    "top_k": top_k,
+                    "search_content": True,
+                    "include_retrieved_data": False
+                }
+            )
+            response.raise_for_status()
+            result = response.json()
+            return result["result"]["answer"]
+        except Exception as e:
+            logger.error(f"画像記憶の検索に失敗しました: {e}")
+            return None
 
     async def delete_history(self, user_id: str, session_id: str = None):
         """指定したユーザーの会話履歴を削除"""

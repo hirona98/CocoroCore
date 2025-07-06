@@ -116,6 +116,62 @@ def setup_memory_tools(
         },
     }
 
+    # 画像記憶検索ツールを追加
+    search_image_memories_spec = {
+        "type": "function",
+        "function": {
+            "name": "search_image_memories",
+            "description": (
+                "過去の画像関連の記憶を検索します。"
+                "ユーザーが画像を見せた時や、画像に関連する話題の時に使用します。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "検索したい画像関連の内容（例：遊園地、食事、風景、動物など）"
+                        ),
+                    }
+                },
+                "required": ["query"],
+            },
+        },
+    }
+
+    # 要約生成ツールを追加
+    create_summary_spec = {
+        "type": "function",
+        "function": {
+            "name": "create_summary",
+            "description": (
+                "現在の会話セッションの要約を手動で生成します。"
+                "長い会話の整理や重要な内容のまとめに使用します。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    }
+
+    # ナレッジ取得ツールを追加
+    get_knowledge_spec = {
+        "type": "function",
+        "function": {
+            "name": "get_knowledge",
+            "description": (
+                "保存されているユーザーのナレッジ（知識）一覧を取得します。"
+                "ユーザーについて何を覚えているか確認する時に使用します。"
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    }
+
     @sts.llm.tool(memory_search_spec)
     async def search_memory(query: str, metadata: dict = None):
         """過去の記憶を検索"""
@@ -219,6 +275,73 @@ def setup_memory_tools(
             return "現在のセッションの会話履歴と要約を削除しました。"
         else:
             return "セッションIDが不明なため、削除できませんでした。"
+
+    @sts.llm.tool(search_image_memories_spec)
+    async def search_image_memories(query: str, metadata: dict = None):
+        """画像関連の記憶を検索"""
+        logger.debug(f"ツール呼び出し: search_image_memories(query='{query}')")
+
+        # 画像記憶検索開始のステータス通知
+        if cocoro_dock_client:
+            asyncio.create_task(
+                cocoro_dock_client.send_status_update("画像記憶検索中", status_type="memory_accessing")
+            )
+
+        user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
+        result = await memory_client.search_image_memories(user_id, query)
+
+        if result:
+            return result
+        else:
+            return "関連する画像の記憶が見つかりませんでした。"
+
+    @sts.llm.tool(create_summary_spec)
+    async def create_summary(metadata: dict = None):
+        """現在のセッションの要約を生成"""
+        logger.debug("ツール呼び出し: create_summary()")
+
+        # 要約生成開始のステータス通知
+        if cocoro_dock_client:
+            asyncio.create_task(
+                cocoro_dock_client.send_status_update("要約生成中", status_type="memory_accessing")
+            )
+
+        user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
+        session_id = metadata.get("session_id") if metadata else None
+
+        if session_id:
+            await memory_client.create_summary(user_id, session_id)
+            return "現在のセッションの要約を生成しました。"
+        else:
+            return "セッションIDが不明なため、要約生成できませんでした。"
+
+    @sts.llm.tool(get_knowledge_spec)
+    async def get_knowledge(metadata: dict = None):
+        """保存されているナレッジを取得"""
+        logger.debug("ツール呼び出し: get_knowledge()")
+
+        # ナレッジ取得開始のステータス通知
+        if cocoro_dock_client:
+            asyncio.create_task(
+                cocoro_dock_client.send_status_update("ナレッジ取得中", status_type="memory_accessing")
+            )
+
+        user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
+        knowledge_list = await memory_client.get_knowledge(user_id)
+
+        if knowledge_list:
+            # ナレッジを整理して返す
+            formatted_knowledge = []
+            for i, item in enumerate(knowledge_list, 1):
+                if isinstance(item, dict):
+                    knowledge_text = item.get("knowledge", "")
+                    formatted_knowledge.append(f"{i}. {knowledge_text}")
+                else:
+                    formatted_knowledge.append(f"{i}. {item}")
+            
+            return "保存されているナレッジ:\n" + "\n".join(formatted_knowledge)
+        else:
+            return "保存されているナレッジはありません。"
 
     # システムプロンプトに記憶機能の説明を追加
     memory_prompt_addition = (
