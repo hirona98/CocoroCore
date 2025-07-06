@@ -37,7 +37,9 @@ def setup_memory_tools(
             "name": "search_memory",
             "description": (
                 "過去の会話や記憶から情報を検索します。"
-                "ユーザーの好み、過去の話題、個人的な情報などを探す時に使用します。"
+                "ユーザーの好み、過去の話題、個人的な情報などを探す時に使用します。\n"
+                "画像関連の記憶を検索したい場合は、検索語に『画像』『写真』『見せた』"
+                "などのキーワードを含めてください。"
             ),
             "parameters": {
                 "type": "object",
@@ -45,7 +47,9 @@ def setup_memory_tools(
                     "query": {
                         "type": "string",
                         "description": (
-                            "検索したい内容（例：ユーザーの好きな食べ物、前回話した内容など）"
+                            "検索したい内容。例：\n"
+                            "- 一般検索: 'ユーザーの好きな食べ物'、'前回話した内容'\n"
+                            "- 画像検索: '画像 遊園地'、'写真 ペット'、'見せた 料理'"
                         ),
                     }
                 },
@@ -81,29 +85,6 @@ def setup_memory_tools(
 
 
 
-    # 画像記憶検索ツールを追加
-    search_image_memories_spec = {
-        "type": "function",
-        "function": {
-            "name": "search_image_memories",
-            "description": (
-                "過去の画像関連の記憶を検索します。"
-                "ユーザーが画像を見せた時や、画像に関連する話題の時に使用します。"
-            ),
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": (
-                            "検索したい画像関連の内容（例：遊園地、食事、風景、動物など）"
-                        ),
-                    }
-                },
-                "required": ["query"],
-            },
-        },
-    }
 
     # 要約生成ツールを追加
     create_summary_spec = {
@@ -174,24 +155,6 @@ def setup_memory_tools(
 
 
 
-    @sts.llm.tool(search_image_memories_spec)
-    async def search_image_memories(query: str, metadata: dict = None):
-        """画像関連の記憶を検索"""
-        logger.debug(f"ツール呼び出し: search_image_memories(query='{query}')")
-
-        # 画像記憶検索開始のステータス通知
-        if cocoro_dock_client:
-            asyncio.create_task(
-                cocoro_dock_client.send_status_update("画像記憶検索中", status_type="memory_accessing")
-            )
-
-        user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
-        result = await memory_client.search_image_memories(user_id, query)
-
-        if result:
-            return result
-        else:
-            return "関連する画像の記憶が見つかりませんでした。"
 
     @sts.llm.tool(create_summary_spec)
     async def create_summary(metadata: dict = None):
@@ -267,6 +230,7 @@ def setup_memory_tools(
         + "検索してから回答\n"
         + "- 固有名詞・日付・好み・感想が出現: 即座にadd_knowledgeで保存\n"
         + "- 応答前: 必ずsearch_memoryで関連情報を検索してからパーソナライズした応答\n"
+        + "- 画像関連検索: 検索語に『画像』『写真』『見せた』を含めて検索\n"
         + "- 要約記憶: 要約を保存してと言われたらcreate_summaryで現在の会話を要約保存\n"
     )
 

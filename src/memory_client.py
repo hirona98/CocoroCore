@@ -174,28 +174,6 @@ class ChatMemoryClient:
         except Exception as e:
             logger.error(f"ナレッジの追加に失敗しました: {e}")
 
-    async def search_image_memories(self, user_id: str, query: str, top_k: int = 3) -> Optional[str]:
-        """画像関連の記憶を検索"""
-        try:
-            # 画像が含まれる履歴/summaryを優先検索
-            image_query = f"画像が共有されました OR 写真 OR 見せた {query}"
-            
-            response = await self.client.post(
-                f"{self.base_url}/search",
-                json={
-                    "user_id": user_id,
-                    "query": image_query,
-                    "top_k": top_k,
-                    "search_content": True,
-                    "include_retrieved_data": False
-                }
-            )
-            response.raise_for_status()
-            result = response.json()
-            return result["result"]["answer"]
-        except Exception as e:
-            logger.error(f"画像記憶の検索に失敗しました: {e}")
-            return None
 
 
 
