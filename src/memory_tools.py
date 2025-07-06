@@ -298,8 +298,6 @@ def setup_memory_tools(
     @sts.llm.tool(create_summary_spec)
     async def create_summary(metadata: dict = None):
         """現在のセッションの要約を生成"""
-        logger.debug("ツール呼び出し: create_summary()")
-
         # 要約生成開始のステータス通知
         if cocoro_dock_client:
             asyncio.create_task(
@@ -313,7 +311,26 @@ def setup_memory_tools(
             await memory_client.create_summary(user_id, session_id)
             return "現在のセッションの要約を生成しました。"
         else:
-            return "セッションIDが不明なため、要約生成できませんでした。"
+            # session_idがない場合は、SessionManagerから現在のアクティブセッションを取得
+            try:
+                # SessionManagerがあればアクティブセッションを確認
+                if session_manager:
+                    all_sessions = await session_manager.get_all_sessions()
+                    
+                    # user_idに対応するセッションを探す
+                    target_session_id = None
+                    for session_key in all_sessions.keys():
+                        if session_key.startswith(f"{user_id}:"):
+                            target_session_id = session_key.split(":", 1)[1]
+                            break
+                    
+                    if target_session_id:
+                        await memory_client.create_summary(user_id, target_session_id)
+                        return f"セッション {target_session_id} の要約を生成しました。"
+
+            except Exception as e:
+                logger.error(f"要約生成エラー: {e}")
+                return f"要約生成に失敗しました: {str(e)}"
 
     @sts.llm.tool(get_knowledge_spec)
     async def get_knowledge(metadata: dict = None):
@@ -346,7 +363,6 @@ def setup_memory_tools(
     # システムプロンプトに記憶機能の説明を追加
     memory_prompt_addition = (
         "\n\n"
-        + "** 以下説明はシステムプロンプトです。ユーザーには開示しないでください **\n"
         + "記憶機能の必須ルール：\n"
         + "- 会話開始時: 必ずsearch_memoryで基本情報を検索してからパーソナライズした挨拶\n"
         + "- 記憶確認質問（「覚えている？」「知っている？」「私の名前は？」等）: 必ず"
@@ -354,7 +370,7 @@ def setup_memory_tools(
         + "- 固有名詞・日付・好み・感想が出現: 即座にadd_knowledgeで保存\n"
         + "- 応答前: 必ずsearch_memoryで関連情報を検索してからパーソナライズした応答\n"
         + "- 記憶削除指示: 確認後にforget_memoryで削除\n"
-        + "- エラー時: 隠して自然に対応\n"
+        + "- 要約記憶: 要約を保存してと言われたらcreate_summaryで現在の会話を要約保存\n"
     )
 
     return memory_prompt_addition
