@@ -63,10 +63,21 @@ class ChatMemoryClient:
                 )
                 logger.info(f"画像説明をシステムメッセージとして履歴に追加: {image_info[:30]}... [{category}/{mood}/{time}]")
             
+            # ユーザーの元の発言を抽出
+            user_original_text = request.text
+            if user_metadata.get('image_description'):
+                # 画像情報が追加されている場合、元の発言部分を抽出
+                # パターン: "[画像を共有しました: ...]\n元の発言" または "[画像を共有しました: ...]" のみ
+                import re
+                pattern = r'^\[画像を共有しました: .+?\](?:\n(.+))?$'
+                match = re.match(pattern, request.text, re.DOTALL)
+                if match:
+                    user_original_text = match.group(1) if match.group(1) else ""
+            
             self._message_queue.append(
                 {
                     "role": "user",
-                    "content": request.text,
+                    "content": user_original_text,
                     "metadata": user_metadata,
                 }
             )
