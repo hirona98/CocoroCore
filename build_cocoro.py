@@ -32,6 +32,17 @@ def build_cocoro(config=None):
 
     print(f"\n=== {app_name} ビルドを開始します ===")
 
+    # 動的スペックファイル生成
+    print("📋 動的スペックファイルを生成中...")
+    try:
+        from create_spec import create_spec_file
+        spec_file = create_spec_file()
+        print(f"✅ スペックファイル生成完了: {spec_file}")
+    except Exception as e:
+        print(f"❌ スペックファイル生成に失敗: {e}")
+        print("既存のスペックファイルを使用します")
+        spec_file = "CocoroCore.spec"
+
     # PyInstallerのインストール確認
     try:
         import importlib.util
@@ -118,9 +129,11 @@ def build_cocoro(config=None):
             pyinstaller_args.append(f"--add-data={src};{dst}")
     pyinstaller_args.append("src/main.py")
 
-    # コマンド実行
-    print("\n📋 実行するコマンド:", " ".join(pyinstaller_args))
-    subprocess.call(pyinstaller_args)
+    # 動的スペックファイルを使用してビルド
+    print(f"\n📋 PyInstallerでビルド中（{spec_file}使用）...")
+    spec_args = ["pyinstaller", spec_file, "--clean"]
+    print("📋 実行するコマンド:", " ".join(spec_args))
+    subprocess.call(spec_args)
 
     # 結果確認
     # ビルド結果の確認（onefile設定に応じて判定方法を変更）

@@ -23,6 +23,7 @@ from dummy_db import DummyPerformanceRecorder, DummyVoiceRecorder
 from llm_manager import LLMStatusManager, create_llm_service
 from memory_client import ChatMemoryClient
 from memory_tools import setup_memory_tools
+from mcp_tools import setup_mcp_tools, get_mcp_status, shutdown_mcp_system, initialize_mcp_if_pending
 from session_manager import SessionManager, create_timeout_checker
 from shutdown_handler import shutdown_handler
 from stt_manager import create_stt_service
@@ -580,6 +581,16 @@ def create_app(config_dir=None):
         if memory_prompt_addition and memory_prompt_addition not in llm.system_prompt:
             llm.system_prompt = llm.system_prompt + memory_prompt_addition
 
+    # MCPツールをセットアップ
+    logger.info("MCPツールを初期化します")
+    mcp_prompt_addition = setup_mcp_tools(sts, config, cocoro_dock_client)
+    if mcp_prompt_addition:
+        llm.system_prompt = llm.system_prompt + mcp_prompt_addition
+        logger.info("MCPツールの説明をシステムプロンプトに追加しました")
+    
+    # MCPシステムのクリーンアップタスクを登録
+    shutdown_handler.register_cleanup_task(shutdown_mcp_system, "MCP System")
+
     # REST APIクライアントの初期化
     if enable_cocoro_shell:
         cocoro_shell_client = CocoroShellClient(f"http://127.0.0.1:{cocoro_shell_port}")
@@ -787,6 +798,9 @@ def create_app(config_dir=None):
             logger.info("🔄 VAD定期調整タスクを開始しました")
         elif vad_instance and not vad_auto_adjustment:
             logger.info("🔧 VAD自動調整無効のため、定期調整タスクはスキップしました")
+        
+        # MCP初期化が保留中の場合は実行
+        await initialize_mcp_if_pending()
 
     # STSパイプラインの_process_text_requestメソッドをオーバーライド
     if hasattr(sts, "_process_text_request"):
@@ -817,6 +831,9 @@ def create_app(config_dir=None):
     @app.get("/health")
     async def health_check():
         """ヘルスチェック用エンドポイント"""
+        # MCP状態を取得
+        mcp_status = await get_mcp_status()
+        
         return {
             "status": "healthy",
             "version": "1.0.0",
@@ -824,7 +841,20 @@ def create_app(config_dir=None):
             "memory_enabled": memory_enabled,
             "llm_model": llm_model,
             "active_sessions": session_manager.get_active_session_count(),
+            "mcp_status": mcp_status,
         }
+
+    # MCP診断エンドポイント
+    @app.post("/api/mcp/diagnose")
+    async def mcp_diagnose():
+        """MCP診断を実行"""
+        try:
+            from mcp_diagnostics import diagnose_mcp_servers
+            await diagnose_mcp_servers()
+            return {"status": "success", "message": "MCP診断が完了しました。ログを確認してください。"}
+        except Exception as e:
+            logger.error(f"MCP診断エラー: {e}")
+            return {"status": "error", "message": f"MCP診断に失敗しました: {str(e)}"}
 
     # 制御コマンドエンドポイント
     @app.post("/api/control")
