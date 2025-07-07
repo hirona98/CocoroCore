@@ -10,6 +10,48 @@ from session_manager import SessionManager
 logger = logging.getLogger(__name__)
 
 
+def _format_memory_data(raw_data: dict, query: str) -> str:
+    """生の記憶データをLLMが使いやすい形式に整理"""
+    results = raw_data.get("results", {})
+    formatted_parts = []
+    
+    # 要約データの整理
+    summaries = results.get("summaries", [])
+    if summaries:
+        formatted_parts.append("=== 過去の会話要約 ===")
+        for i, summary in enumerate(summaries[:3], 1):  # 上位3件
+            content = summary.get("content", "")
+            if content:
+                formatted_parts.append(f"{i}. {content}")
+    
+    # 知識データの整理
+    knowledge = results.get("knowledge", [])
+    if knowledge:
+        formatted_parts.append("\n=== 保存済み知識 ===")
+        for i, item in enumerate(knowledge[:3], 1):  # 上位3件
+            content = item.get("content", "")
+            if content:
+                formatted_parts.append(f"{i}. {content}")
+    
+    # 履歴データの整理
+    history = results.get("history", [])
+    if history:
+        formatted_parts.append("\n=== 関連する過去の発言 ===")
+        for i, item in enumerate(history[:2], 1):  # 上位2件
+            content = item.get("content", "")
+            role = item.get("role", "")
+            if content and role:
+                speaker = "マスター" if role == "user" else "私"
+                formatted_parts.append(f"{i}. {speaker}: {content}")
+    
+    if formatted_parts:
+        result = f"「{query}」について検索した記憶:\n\n" + "\n".join(formatted_parts)
+        result += "\n\n※ この記憶を参考に、リスティとしてパーソナライズした回答をしてください。"
+        return result
+    else:
+        return "関連する記憶が見つかりませんでした。"
+
+
 def setup_memory_tools(
     sts,
     config,
@@ -129,10 +171,16 @@ def setup_memory_tools(
             )
 
         user_id = metadata.get("user_id", "default_user") if metadata else "default_user"
-        result = await memory_client.search(user_id, query)
-
-        if result:
-            return result
+        
+        # 記憶検索を実行
+        raw_data = await memory_client.search(user_id, query)
+        
+        if raw_data and raw_data.get("total_count", 0) > 0:
+            # 記憶データを整理してLLMが利用しやすい形式に変換
+            formatted_memory = _format_memory_data(raw_data, query)
+            
+            # 整理された記憶データを返してLLMがキャラクターとして回答生成に活用
+            return formatted_memory
         else:
             return "関連する記憶が見つかりませんでした。"
 
@@ -209,6 +257,13 @@ def setup_memory_tools(
         + "- 応答前: 必ずsearch_memoryで関連情報を検索してからパーソナライズした応答\n"
         + "- 画像関連検索: 検索語に『画像』『写真』『見せた』を含めて検索\n"
         + "- 要約記憶: 要約を保存してと言われたらcreate_summaryで現在の会話を要約保存\n"
+        + "\n"
+        + "記憶データの活用方法：\n"
+        + "- search_memoryツールは整理された記憶データを返します\n"
+        + "- 検索結果には「※この記憶を参考に、リスティとしてパーソナライズした回答をしてください」という指示が含まれます\n"
+        + "- 記憶の内容をそのまま読み上げるのではなく、リスティの人格でパーソナライズして応答してください\n"
+        + "- 記憶が見つからない場合は、素直に「覚えていません」と答えてください\n"
+        + "- 記憶の詳細より、マスターとの関係性や感情を重視した応答を心がけてください\n"
     )
 
     return memory_prompt_addition

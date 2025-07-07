@@ -126,8 +126,8 @@ class ChatMemoryClient:
             async with self._queue_lock:
                 self._message_queue = messages + self._message_queue
 
-    async def search(self, user_id: str, query: str, top_k: int = 5) -> Optional[str]:
-        """過去の記憶を検索して回答を生成"""
+    async def search(self, user_id: str, query: str, top_k: int = 5) -> Optional[dict]:
+        """記憶検索（高速）"""
         try:
             response = await self.client.post(
                 f"{self.base_url}/search",
@@ -135,15 +135,21 @@ class ChatMemoryClient:
                     "user_id": user_id,
                     "query": query,
                     "top_k": top_k,
-                    "search_content": True,
-                    "include_retrieved_data": True,
                 },
             )
             response.raise_for_status()
             result = response.json()
-            return result["result"]["answer"]
+            
+            if "error" in result:
+                logger.error(f"記憶検索エラー: {result['error']}")
+                return None
+                
+            return result
+        except httpx.ConnectError:
+            logger.debug("ChatMemory未起動。処理を継続します。")
+            return None
         except Exception as e:
-            logger.error(f"記憶の検索に失敗しました: {e}")
+            logger.error(f"記憶検索に失敗しました: {e}")
             return None
 
     async def create_summary(self, user_id: str, session_id: str = None):
