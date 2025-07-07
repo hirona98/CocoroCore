@@ -11,45 +11,18 @@ logger = logging.getLogger(__name__)
 
 
 def _format_memory_data(raw_data: dict, query: str) -> str:
-    """生の記憶データをLLMが使いやすい形式に整理"""
-    results = raw_data.get("results", {})
-    formatted_parts = []
+    """記憶データをLLMが使いやすい形式に整理"""
+    retrieved_data = raw_data.get("retrieved_data", "")
     
-    # 要約データの整理
-    summaries = results.get("summaries", [])
-    if summaries:
-        formatted_parts.append("=== 過去の会話要約 ===")
-        for i, summary in enumerate(summaries[:3], 1):  # 上位3件
-            content = summary.get("content", "")
-            if content:
-                formatted_parts.append(f"{i}. {content}")
-    
-    # 知識データの整理
-    knowledge = results.get("knowledge", [])
-    if knowledge:
-        formatted_parts.append("\n=== 保存済み知識 ===")
-        for i, item in enumerate(knowledge[:3], 1):  # 上位3件
-            content = item.get("content", "")
-            if content:
-                formatted_parts.append(f"{i}. {content}")
-    
-    # 履歴データの整理
-    history = results.get("history", [])
-    if history:
-        formatted_parts.append("\n=== 関連する過去の発言 ===")
-        for i, item in enumerate(history[:2], 1):  # 上位2件
-            content = item.get("content", "")
-            role = item.get("role", "")
-            if content and role:
-                speaker = "マスター" if role == "user" else "私"
-                formatted_parts.append(f"{i}. {speaker}: {content}")
-    
-    if formatted_parts:
-        result = f"「{query}」について検索した記憶:\n\n" + "\n".join(formatted_parts)
-        result += "\n\n※ この記憶を参考に、リスティとしてパーソナライズした回答をしてください。"
-        return result
-    else:
+    if not retrieved_data or not retrieved_data.strip():
         return "関連する記憶が見つかりませんでした。"
+    
+    # ChatMemoryから取得したretrieved_dataをそのまま活用し、
+    # キャラクター向けの指示を追加
+    result = f"「{query}」について検索した記憶:\n\n{retrieved_data}"
+    result += "\n\n※ この記憶を参考に、リスティとしてパーソナライズした回答をしてください。"
+    
+    return result
 
 
 def setup_memory_tools(
@@ -175,7 +148,7 @@ def setup_memory_tools(
         # 記憶検索を実行
         raw_data = await memory_client.search(user_id, query)
         
-        if raw_data and raw_data.get("total_count", 0) > 0:
+        if raw_data and raw_data.get("total_found", False):
             # 記憶データを整理してLLMが利用しやすい形式に変換
             formatted_memory = _format_memory_data(raw_data, query)
             
