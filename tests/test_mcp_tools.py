@@ -1,0 +1,317 @@
+#!/usr/bin/env python
+"""MCP ツールシステムのテスト"""
+
+import pytest
+import asyncio
+import json
+import os
+import tempfile
+import sys
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+# テスト対象のモジュールをインポート
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from mcp_tools import MCPServerManager, setup_mcp_tools, get_mcp_status
+
+
+class TestMCPServerManager:
+    """MCPServerManagerクラスのテスト"""
+    
+    def setup_method(self):
+        """各テストメソッドの前に実行"""
+        self.servers_config = {
+            "test-server": {
+                "enabled": True,
+                "command": "python",
+                "args": ["-c", "import sys; import json; import time; input()"],
+                "env": {},
+                "source": "local"
+            }
+        }
+        self.manager = MCPServerManager(self.servers_config)
+    
+    def test_init(self):
+        """初期化のテスト"""
+        assert self.manager.servers_config == self.servers_config
+        assert self.manager.available_tools == {}
+        assert self.manager.server_processes == {}
+    
+    def test_get_server_info_empty(self):
+        """空の状態でのサーバー情報取得テスト"""
+        info = self.manager.get_server_info()
+        
+        assert info["total_servers"] == 1
+        assert info["connected_servers"] == 0
+        assert info["total_tools"] == 0
+        assert "test-server" in info["servers"]
+        assert not info["servers"]["test-server"]["connected"]
+    
+    @pytest.mark.asyncio
+    async def test_cleanup_server(self):
+        """サーバークリーンアップのテスト"""
+        # モックプロセスを作成
+        mock_process = AsyncMock()
+        mock_process.returncode = None
+        mock_process.terminate = MagicMock()
+        mock_process.wait = AsyncMock()
+        
+        # プロセスとツールを手動で設定
+        self.manager.server_processes["test-server"] = mock_process
+        self.manager.available_tools["test-server_test_tool"] = {
+            "server": "test-server",
+            "tool": {"name": "test_tool"},
+            "process": mock_process,
+            "config": self.servers_config["test-server"],
+            "jsonrpc_mode": True
+        }
+        
+        # クリーンアップ実行
+        await self.manager._cleanup_server("test-server")
+        
+        # プロセスが終了されたことを確認
+        mock_process.terminate.assert_called_once()
+        mock_process.wait.assert_called_once()
+        
+        # データが削除されたことを確認
+        assert "test-server" not in self.manager.server_processes
+        assert "test-server_test_tool" not in self.manager.available_tools
+    
+    @pytest.mark.asyncio
+    async def test_disconnect_server(self):
+        """サーバー切断のテスト"""
+        # モックプロセスを設定
+        mock_process = AsyncMock()
+        self.manager.server_processes["test-server"] = mock_process
+        
+        # _cleanup_serverをモック化
+        with patch.object(self.manager, '_cleanup_server') as mock_cleanup:
+            await self.manager.disconnect_server("test-server")
+            mock_cleanup.assert_called_once_with("test-server")
+    
+    @pytest.mark.asyncio
+    async def test_check_npx_package(self):
+        """NPXパッケージチェックのテスト"""
+        # npm viewコマンドをモック化
+        with patch('asyncio.create_subprocess_exec') as mock_subprocess:
+            mock_process = AsyncMock()
+            mock_process.communicate.return_value = (b"test-package", b"")
+            mock_process.returncode = 0
+            mock_subprocess.return_value = mock_process
+            
+            result = await self.manager._check_npx_package(["-y", "test-package"], {})
+            assert result is True
+    
+    def test_get_server_info_with_tools(self):
+        """ツールがある状態でのサーバー情報取得テスト"""
+        # ツールを手動で追加
+        self.manager.available_tools["test-server_calculator"] = {
+            "server": "test-server",
+            "tool": {"name": "calculator", "description": "計算ツール"},
+            "config": self.servers_config["test-server"]
+        }
+        
+        # モックプロセスを追加
+        mock_process = AsyncMock()
+        self.manager.server_processes["test-server"] = mock_process
+        
+        info = self.manager.get_server_info()
+        
+        assert info["total_servers"] == 1
+        assert info["connected_servers"] == 1
+        assert info["total_tools"] == 1
+        assert info["servers"]["test-server"]["connected"] is True
+        assert info["servers"]["test-server"]["tool_count"] == 1
+        assert info["servers"]["test-server"]["connection_type"] == "jsonrpc"
+
+
+class TestJSONRPCCommunication:
+    """JSON-RPC通信のテスト"""
+    
+    @pytest.mark.asyncio
+    async def test_jsonrpc_message_format(self):
+        """JSON-RPCメッセージ形式のテスト"""
+        manager = MCPServerManager({})
+        
+        # ツール実行用のJSONメッセージをテスト
+        tool_info = {
+            "tool": {"name": "test_tool"},
+            "process": AsyncMock()
+        }
+        
+        # stdin/stdoutをモック化
+        mock_stdin = AsyncMock()
+        mock_stdout = AsyncMock()
+        
+        # 正常な応答をモック
+        response_data = {
+            "jsonrpc": "2.0",
+            "id": 1234,
+            "result": {
+                "content": [{"text": "テスト結果"}]
+            }
+        }
+        response_line = (json.dumps(response_data) + "\n").encode('utf-8')
+        mock_stdout.readline.return_value = response_line
+        
+        tool_info["process"].stdin = mock_stdin
+        tool_info["process"].stdout = mock_stdout
+        
+        # ツール実行テスト
+        result = await manager._execute_tool_jsonrpc(tool_info, {"param": "value"})
+        
+        # 結果確認
+        assert result == "テスト結果"
+        
+        # 送信されたメッセージを確認
+        mock_stdin.write.assert_called_once()
+        sent_data = mock_stdin.write.call_args[0][0].decode('utf-8').strip()
+        sent_message = json.loads(sent_data)
+        
+        assert sent_message["jsonrpc"] == "2.0"
+        assert sent_message["method"] == "tools/call"
+        assert sent_message["params"]["name"] == "test_tool"
+        assert sent_message["params"]["arguments"] == {"param": "value"}
+
+
+class TestMCPSetup:
+    """MCP設定のテスト"""
+    
+    def test_setup_mcp_tools_no_config(self):
+        """設定が空の場合のセットアップテスト"""
+        # モックSTS
+        mock_sts = MagicMock()
+        
+        # モック設定（空の設定）
+        mock_config = MagicMock()
+        mock_config._config_dir = "./UserData"
+        
+        # get_merged_mcp_configをモック化（空の設定を返す）
+        with patch('mcp_tools.get_merged_mcp_config') as mock_get_config:
+            mock_get_config.return_value = {"servers": {}}
+            
+            result = setup_mcp_tools(mock_sts, mock_config)
+            
+            # 空の設定でも正常に処理されることを確認
+            assert isinstance(result, str)
+            # 空の設定の場合はメッセージが空文字列になることを確認
+            assert result == ""
+    
+    def test_setup_mcp_tools_with_servers(self):
+        """サーバー設定がある場合のセットアップテスト"""
+        mock_sts = MagicMock()
+        mock_config = MagicMock()
+        mock_config._config_dir = "./UserData"
+        
+        # テスト用のサーバー設定
+        test_servers = {
+            "claude_filesystem": {
+                "command": "npx",
+                "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+                "source": "claude_desktop"
+            },
+            "local_calculator": {
+                "command": "python",
+                "args": ["calculator.py"],
+                "source": "local"
+            }
+        }
+        
+        with patch('mcp_tools.get_merged_mcp_config') as mock_get_config:
+            mock_get_config.return_value = {"servers": test_servers}
+            
+            result = setup_mcp_tools(mock_sts, mock_config)
+            
+            # サーバー情報が含まれることを確認
+            assert "Claude Desktopからインポート: filesystem" in result
+            assert "ローカル設定: local_calculator" in result
+
+
+class TestMCPStatus:
+    """MCP状態取得のテスト"""
+    
+    @pytest.mark.asyncio
+    async def test_get_mcp_status_no_manager(self):
+        """マネージャーが未初期化の場合のテスト"""
+        # グローバルマネージャーをリセット
+        import mcp_tools
+        original_manager = mcp_tools.mcp_manager
+        mcp_tools.mcp_manager = None
+        
+        try:
+            status = await get_mcp_status()
+            assert "error" in status
+            assert "MCPマネージャーが初期化されていません" in status["error"]
+        finally:
+            # 元の状態に戻す
+            mcp_tools.mcp_manager = original_manager
+    
+    @pytest.mark.asyncio
+    async def test_get_mcp_status_with_manager(self):
+        """マネージャーが初期化済みの場合のテスト"""
+        import mcp_tools
+        
+        # テスト用マネージャーを作成
+        test_manager = MCPServerManager({"test": {"enabled": True}})
+        original_manager = mcp_tools.mcp_manager
+        mcp_tools.mcp_manager = test_manager
+        
+        try:
+            status = await get_mcp_status()
+            assert "total_servers" in status
+            assert "connected_servers" in status
+            assert "total_tools" in status
+            assert "servers" in status
+        finally:
+            # 元の状態に戻す
+            mcp_tools.mcp_manager = original_manager
+
+
+class TestErrorHandling:
+    """エラーハンドリングのテスト"""
+    
+    @pytest.mark.asyncio
+    async def test_execute_tool_not_found(self):
+        """存在しないツールの実行テスト"""
+        manager = MCPServerManager({})
+        
+        with pytest.raises(ValueError, match="ツール 'nonexistent_tool' が見つかりません"):
+            await manager.execute_tool("nonexistent_tool", {})
+    
+    @pytest.mark.asyncio
+    async def test_jsonrpc_timeout_error(self):
+        """JSON-RPC通信タイムアウトのテスト"""
+        manager = MCPServerManager({})
+        
+        tool_info = {
+            "tool": {"name": "slow_tool"},
+            "process": AsyncMock()
+        }
+        
+        # タイムアウトを発生させる
+        tool_info["process"].stdout.readline = AsyncMock(side_effect=asyncio.TimeoutError())
+        
+        with pytest.raises(Exception, match="ツールの実行がタイムアウトしました"):
+            await manager._execute_tool_jsonrpc(tool_info, {})
+    
+    @pytest.mark.asyncio
+    async def test_jsonrpc_json_decode_error(self):
+        """JSON-RPC応答の解析エラーテスト"""
+        manager = MCPServerManager({})
+        
+        tool_info = {
+            "tool": {"name": "broken_tool"},
+            "process": AsyncMock()
+        }
+        
+        # 不正なJSONを返す
+        tool_info["process"].stdout.readline.return_value = b"invalid json\n"
+        
+        with pytest.raises(Exception, match="ツール応答の解析に失敗しました"):
+            await manager._execute_tool_jsonrpc(tool_info, {})
+
+
+if __name__ == "__main__":
+    # テスト実行
+    pytest.main([__file__, "-v", "--tb=short"])

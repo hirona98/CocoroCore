@@ -12,5 +12,11 @@
     "[python]": {
         "editor.defaultFormatter": "charliermarsh.ruff",
     },
-    "commentTranslate.hover.enabled": false
+    "commentTranslate.hover.enabled": false,
+    "python.testing.pytestArgs": [
+        "tests"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.testing.autoTestDiscoverOnSaveEnabled": false
 }

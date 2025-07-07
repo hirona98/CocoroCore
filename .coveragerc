@@ -1,0 +1,47 @@
+[run]
+source = src
+omit = 
+    # エントリーポイント（実行用のみ）
+    src/main.py
+    
+    # ビルド関連ファイル
+    src/build_*.py
+    src/*_build.py
+    build_*.py
+    create_spec.py
+    
+    # ダミー・テスト・診断ファイル
+    src/dummy_db.py
+    src/mcp_diagnostics.py
+    src/claude_mcp_importer.py
+    
+    # 外部依存が重い、テスト困難なファイル
+    src/cocoro_core.py
+    src/stt_manager.py
+    src/vad_manager.py
+    
+    # テスト・開発関連ディレクトリ
+    */test*
+    */tests/*
+    */venv/*
+    */.venv/*
+    */build/*
+    */dist/*
+    */htmlcov/*
+    */patches/*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    def __repr__
+    if self.debug:
+    if settings.DEBUG
+    raise AssertionError
+    raise NotImplementedError
+    if 0:
+    if __name__ == .__main__.:
+    class .*\bProtocol\):
+    @(abc\.)?abstractmethod
+
+[html]
+directory = htmlcov
