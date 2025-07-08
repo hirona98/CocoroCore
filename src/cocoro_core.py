@@ -21,9 +21,14 @@ from config_loader import load_config
 from config_validator import validate_config
 from dummy_db import DummyPerformanceRecorder, DummyVoiceRecorder
 from llm_manager import LLMStatusManager, create_llm_service
+from mcp_tools import (
+    get_mcp_status,
+    initialize_mcp_if_pending,
+    setup_mcp_tools,
+    shutdown_mcp_system,
+)
 from memory_client import ChatMemoryClient
 from memory_tools import setup_memory_tools
-from mcp_tools import setup_mcp_tools, get_mcp_status, shutdown_mcp_system, initialize_mcp_if_pending
 from session_manager import SessionManager, create_timeout_checker
 from shutdown_handler import shutdown_handler
 from stt_manager import create_stt_service
@@ -182,6 +187,48 @@ def create_app(config_dir=None):
     llm_api_key = env_api_key or current_char.get("apiKey")
     llm_model = current_char.get("llmModel")
     system_prompt = current_char.get("systemPrompt", "あなたは親切なアシスタントです。")
+    
+    # 時間感覚ガイドライン（固定部分のみをシステムプロンプトに追加）
+    time_guidelines = (
+        "\n\n時間感覚ガイドライン:\n"
+        "- 挨拶は時間帯に応じて自然に変化させてください（朝：おはよう、昼：こんにちは、夕方：お疲れ様、夜：こんばんは）\n"
+        "- 時間の経過を意識した会話を心がけてください\n"
+        "- 時間に関する質問には、現在時刻の情報を活用して答えてください\n"
+        "- 現在時刻はリクエスト処理時に動的に提供されます\n"
+    )
+
+    system_prompt += time_guidelines
+
+    # 時間情報生成用の関数を定義
+    def generate_current_time_info():
+        """現在時刻の情報を生成"""
+        import locale
+
+        # 日本語ロケールの設定（Windows環境対応）
+        try:
+            locale.setlocale(locale.LC_TIME, "ja_JP.UTF-8")
+        except locale.Error:
+            try:
+                locale.setlocale(locale.LC_TIME, "Japanese_Japan.932")
+            except locale.Error:
+                pass  # ロケール設定に失敗してもフォールバック
+
+        now = datetime.now()
+        weekdays = ["月", "火", "水", "木", "金", "土", "日"]
+        weekday_jp = weekdays[now.weekday()]
+
+        # 時間帯の判定
+        hour = now.hour
+        if 5 <= hour < 12:
+            time_period = "朝"
+        elif 12 <= hour < 17:
+            time_period = "昼"
+        elif 17 <= hour < 22:
+            time_period = "夕方"
+        else:
+            time_period = "夜"
+
+        return f"現在の日時: {now.year}年{now.month}月{now.day}日({weekday_jp}) {now.hour}時{now.minute}分 ({time_period})"
     
     # ユーザーID設定を取得
     user_id = current_char.get("userId", "default_user")
@@ -395,6 +442,25 @@ def create_app(config_dir=None):
     @sts.on_before_llm
     async def handle_before_llm(request):
         nonlocal shared_context_id
+
+        # 現在時刻情報を動的に更新
+        current_time_info = generate_current_time_info()
+
+        # システムプロンプトに現在時刻を動的に追加
+        # 前回の時刻情報があれば削除してから新しい情報を追加
+        original_prompt = llm.system_prompt
+        time_marker = "現在の日時:"
+
+        # 既存の時刻情報を削除
+        if time_marker in original_prompt:
+            lines = original_prompt.split("\n")
+            filtered_lines = [line for line in lines if not line.strip().startswith(time_marker)]
+            llm.system_prompt = "\n".join(filtered_lines)
+
+        # 新しい時刻情報を追加
+        llm.system_prompt = llm.system_prompt + f"\n\n{current_time_info}\n"
+
+        logger.debug(f"時刻情報を更新: {current_time_info}")
 
         # user_idを設定ファイルから読み込んだ値に上書き
         if hasattr(request, 'user_id') and user_id:
