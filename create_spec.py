@@ -28,25 +28,25 @@ def create_spec_file():
     # tiktoken
     tiktoken_path = site_packages / "tiktoken"
     if tiktoken_path.exists():
-        data_entries.append(f"('{tiktoken_path}', 'tiktoken')")
+        data_entries.append(f"('{tiktoken_path.as_posix()}', 'tiktoken')")
         print(f"✅ tiktoken found: {tiktoken_path}")
     
     # tiktoken_ext
     tiktoken_ext_path = site_packages / "tiktoken_ext"
     if tiktoken_ext_path.exists():
-        data_entries.append(f"('{tiktoken_ext_path}', 'tiktoken_ext')")
+        data_entries.append(f"('{tiktoken_ext_path.as_posix()}', 'tiktoken_ext')")
         print(f"✅ tiktoken_ext found: {tiktoken_ext_path}")
     
     # litellm tokenizers
     litellm_tokenizers_path = site_packages / "litellm" / "litellm_core_utils" / "tokenizers"
     if litellm_tokenizers_path.exists():
-        data_entries.append(f"('{litellm_tokenizers_path}', 'litellm/litellm_core_utils/tokenizers')")
+        data_entries.append(f"('{litellm_tokenizers_path.as_posix()}', 'litellm/litellm_core_utils/tokenizers')")
         print(f"✅ litellm tokenizers found: {litellm_tokenizers_path}")
     
     # mcp (オプショナル)
     mcp_path = site_packages / "mcp"
     if mcp_path.exists():
-        data_entries.append(f"('{mcp_path}', 'mcp')")
+        data_entries.append(f"('{mcp_path.as_posix()}', 'mcp')")
         print(f"✅ mcp found: {mcp_path}")
     else:
         print("⚠️ mcp not found (optional)")

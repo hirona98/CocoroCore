@@ -5,6 +5,12 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+import io
+
+# Windows環境でのUTF-8出力対応
+if sys.platform == "win32":
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 # ビルド設定
 BUILD_CONFIG = {
@@ -100,7 +106,11 @@ def build_cocoro(config=None):
     ):
         # 仮想環境内
         if sys.platform == "win32":
-            site_packages = Path(sys.prefix) / "Lib" / "site-packages"
+            # Windowsでは'Lib'と'lib'両方の可能性をチェック
+            lib_path = Path(sys.prefix) / "Lib" / "site-packages"
+            if not lib_path.exists():
+                lib_path = Path(sys.prefix) / "lib" / "site-packages"
+            site_packages = lib_path
         else:
             site_packages = (
                 Path(sys.prefix)
@@ -126,7 +136,7 @@ def build_cocoro(config=None):
 
     for src, dst in data_files:
         if src.exists():
-            pyinstaller_args.append(f"--add-data={src};{dst}")
+            pyinstaller_args.append(f"--add-data={src.as_posix()};{dst}")
     pyinstaller_args.append("src/main.py")
 
     # 動的スペックファイルを使用してビルド
@@ -153,10 +163,10 @@ def main():
     """メイン関数"""
     # カスタム設定ファイルがあれば読み込む
     try:
-        print("ℹ️ カスタムビルド設定を読み込みました")
+        print("カスタムビルド設定を読み込みました")
         build_cocoro()
     except ImportError:
-        print("ℹ️ デフォルトビルド設定を使用します")
+        print("デフォルトビルド設定を使用します")
         build_cocoro()
 
 
