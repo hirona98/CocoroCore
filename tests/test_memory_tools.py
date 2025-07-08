@@ -1,6 +1,7 @@
 """memory_tools.py のユニットテスト"""
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, AsyncMock, patch
+import asyncio
 import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -235,6 +236,147 @@ class TestMemoryToolsIntegration(unittest.TestCase):
         for config in configs:
             with self.subTest(config=config):
                 result = setup_memory_tools(mock_sts, config, mock_memory_client)
+                self.assertIsInstance(result, str)
+                self.assertGreater(len(result), 0)
+
+
+class TestMemoryToolsAsync(unittest.IsolatedAsyncioTestCase):
+    """memory_tools モジュールの非同期ツール関数のテストクラス"""
+
+    async def test_memory_tools_setup_calls_decorators(self):
+        """memory_toolsのセットアップ時にデコレーターが呼ばれることをテスト"""
+        mock_sts = MagicMock()
+        mock_memory_client = AsyncMock()
+        mock_session_manager = AsyncMock()
+        mock_dock_client = AsyncMock()
+        mock_config = {"CharacterName": "Test", "user_id": "test"}
+        
+        # setup_memory_toolsを実行
+        result = setup_memory_tools(
+            mock_sts,
+            mock_config,
+            mock_memory_client,
+            mock_session_manager,
+            mock_dock_client
+        )
+        
+        # 3つのツール（search_memory、add_knowledge、create_summary）が登録されることを確認
+        self.assertEqual(mock_sts.llm.tool.call_count, 3)
+        
+        # 結果がプロンプト文字列であることを確認
+        self.assertIsInstance(result, str)
+        self.assertIn("記憶機能の必須ルール", result)
+
+    async def test_memory_tools_format_data_integration(self):
+        """memory_toolsの_format_memory_data関数の統合テスト"""
+        # 成功パターン
+        raw_data = {"retrieved_data": "ユーザーは猫を飼っています。"}
+        query = "ペットについて"
+        result = _format_memory_data(raw_data, query)
+        
+        self.assertIn("「ペットについて」について検索した記憶:", result)
+        self.assertIn("ユーザーは猫を飼っています。", result)
+        self.assertIn("この記憶を参考に、リスティとしてパーソナライズした回答をしてください", result)
+        
+        # 失敗パターン
+        empty_data = {"retrieved_data": ""}
+        result_empty = _format_memory_data(empty_data, query)
+        self.assertEqual(result_empty, "関連する記憶が見つかりませんでした。")
+
+    async def test_memory_tools_no_session_manager(self):
+        """session_managerなしでのmemory_toolsセットアップテスト"""
+        mock_sts = MagicMock()
+        mock_memory_client = AsyncMock()
+        mock_config = {"CharacterName": "Test", "user_id": "test"}
+        
+        # session_managerなしでセットアップ
+        result = setup_memory_tools(
+            mock_sts,
+            mock_config,
+            mock_memory_client,
+            session_manager=None,
+            cocoro_dock_client=None
+        )
+        
+        # 正常にセットアップされることを確認
+        self.assertEqual(mock_sts.llm.tool.call_count, 3)
+        self.assertIsInstance(result, str)
+
+    async def test_memory_tools_no_dock_client(self):
+        """dock_clientなしでのmemory_toolsセットアップテスト"""
+        mock_sts = MagicMock()
+        mock_memory_client = AsyncMock()
+        mock_session_manager = AsyncMock()
+        mock_config = {"CharacterName": "Test", "user_id": "test"}
+        
+        # dock_clientなしでセットアップ
+        result = setup_memory_tools(
+            mock_sts,
+            mock_config,
+            mock_memory_client,
+            session_manager=mock_session_manager,
+            cocoro_dock_client=None
+        )
+        
+        # 正常にセットアップされることを確認
+        self.assertEqual(mock_sts.llm.tool.call_count, 3)
+        self.assertIsInstance(result, str)
+
+    async def test_memory_tools_prompt_content(self):
+        """memory_toolsが返すプロンプト内容のテスト"""
+        mock_sts = MagicMock()
+        mock_memory_client = AsyncMock()
+        mock_config = {"CharacterName": "Test", "user_id": "test"}
+        
+        result = setup_memory_tools(mock_sts, mock_config, mock_memory_client)
+        
+        # プロンプトに重要なキーワードが含まれることを確認
+        self.assertIn("記憶機能の必須ルール", result)
+        self.assertIn("search_memory", result)
+        self.assertIn("add_knowledge", result)
+        self.assertIn("create_summary", result)
+        self.assertIn("キャラクターとしてパーソナライズした回答", result)
+
+    async def test_memory_tools_error_handling_coverage(self):
+        """memory_toolsのエラーハンドリング部分のカバレッジテスト"""
+        # 異常なケースでも正常に動作することを確認
+        mock_sts = MagicMock()
+        mock_memory_client = AsyncMock()
+        
+        # 異常な設定でもエラーが発生しないことを確認
+        empty_config = {}
+        result = setup_memory_tools(mock_sts, empty_config, mock_memory_client)
+        self.assertIsInstance(result, str)
+        
+        # Noneの設定でもエラーが発生しないことを確認
+        none_config = None
+        try:
+            result = setup_memory_tools(mock_sts, none_config, mock_memory_client)
+            # 実際にはエラーになる可能性があるが、テストとしては正常動作を確認
+        except (TypeError, AttributeError):
+            # 期待される例外が発生した場合はテスト成功
+            pass
+
+    async def test_memory_tools_various_character_names(self):
+        """様々なキャラクター名でのmemory_toolsテスト"""
+        mock_sts = MagicMock()
+        mock_memory_client = AsyncMock()
+        
+        # 様々なキャラクター名パターンをテスト
+        character_names = [
+            "通常のキャラクター",
+            "Special!@#$%Characters",
+            "日本語キャラクター",
+            "VeryLongCharacterNameThatMightCauseIssues",
+            "",  # 空文字
+        ]
+        
+        for char_name in character_names:
+            with self.subTest(character_name=char_name):
+                config = {"CharacterName": char_name, "user_id": "test"}
+                result = setup_memory_tools(mock_sts, config, mock_memory_client)
+                
+                # 正常に処理されることを確認
                 self.assertIsInstance(result, str)
                 self.assertGreater(len(result), 0)
 

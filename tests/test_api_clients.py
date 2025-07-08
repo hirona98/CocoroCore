@@ -397,5 +397,113 @@ class TestAPIClientsIntegration(unittest.IsolatedAsyncioTestCase):
         await custom_shell.close()
 
 
+class TestAPIClientsExtended(unittest.IsolatedAsyncioTestCase):
+    """API Clients の拡張テストクラス"""
+
+    async def test_cocoro_dock_client_url_variations(self):
+        """CocoroDockClientの様々なURL形式のテスト"""
+        # 様々なURL形式をテスト
+        urls = [
+            "http://localhost:55600",
+            "http://127.0.0.1:55600/",
+            "https://example.com:8080",
+            "http://192.168.1.100:55600/api",
+        ]
+        
+        for url in urls:
+            with self.subTest(url=url):
+                client = CocoroDockClient(url)
+                
+                # URLが正規化されることを確認
+                if url.endswith('/'):
+                    expected = url[:-1]
+                else:
+                    expected = url
+                self.assertEqual(client.base_url, expected)
+
+    async def test_cocoro_shell_client_url_variations(self):
+        """CocoroShellClientの様々なURL形式のテスト"""
+        # 様々なURL形式をテスト
+        urls = [
+            "http://localhost:55605",
+            "http://127.0.0.1:55605/",
+            "https://example.com:8080",
+            "http://192.168.1.100:55605/api/",
+        ]
+        
+        for url in urls:
+            with self.subTest(url=url):
+                client = CocoroShellClient(url)
+                
+                # URLが正規化されることを確認
+                if url.endswith('/'):
+                    expected = url[:-1]
+                else:
+                    expected = url
+                self.assertEqual(client.base_url, expected)
+
+    async def test_cocoro_dock_client_various_message_types(self):
+        """CocoroDockClientの様々なメッセージタイプのテスト"""
+        client = CocoroDockClient("http://localhost:55600")
+        
+        # 様々なメッセージタイプをテスト
+        message_types = [
+            {"message": "テストメッセージ", "sender": "AI"},
+            {"message": "Empty message", "sender": "User"},
+            {"message": "Long message " * 100, "sender": "System"},
+            {"message": "", "sender": "AI"},  # 空メッセージ
+        ]
+        
+        with patch('httpx.AsyncClient.post') as mock_post:
+            mock_post.return_value.status_code = 200
+            mock_post.return_value.json.return_value = {"status": "success"}
+            
+            for msg_data in message_types:
+                with self.subTest(message_data=msg_data):
+                    await client.send_chat_message(msg_data["message"], msg_data["sender"])
+                    mock_post.assert_called()
+
+        await client.close()
+
+    async def test_cocoro_shell_client_voice_parameters(self):
+        """CocoroShellClientの音声パラメータのテスト"""
+        client = CocoroShellClient("http://localhost:55605")
+        
+        # 様々な音声パラメータをテスト
+        voice_params_list = [
+            {"speed": 1.0, "pitch": 1.0, "volume": 1.0},
+            {"speed": 0.5, "pitch": 0.8, "volume": 0.9},
+            {"speed": 1.5, "pitch": 1.2, "volume": 1.1},
+            {},  # 空のパラメータ
+        ]
+        
+        with patch('httpx.AsyncClient.post') as mock_post:
+            mock_post.return_value.status_code = 200
+            mock_post.return_value.json.return_value = {"status": "success"}
+            
+            for voice_params in voice_params_list:
+                with self.subTest(voice_params=voice_params):
+                    await client.send_chat_for_speech(
+                        "テストメッセージ", 
+                        character_name="TestChar",
+                        voice_params=voice_params
+                    )
+                    mock_post.assert_called()
+
+        await client.close()
+
+    async def test_clients_initialization(self):
+        """クライアントの初期化テスト"""
+        dock_client = CocoroDockClient("http://localhost:55600")
+        shell_client = CocoroShellClient("http://localhost:55605")
+        
+        # クライアントが正常に初期化されることを確認
+        self.assertIsNotNone(dock_client.base_url)
+        self.assertIsNotNone(shell_client.base_url)
+        
+        await dock_client.close()
+        await shell_client.close()
+
+
 if __name__ == '__main__':
     unittest.main()

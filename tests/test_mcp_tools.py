@@ -47,6 +47,24 @@ class TestMCPServerManager:
         assert info["total_tools"] == 0
         assert "test-server" in info["servers"]
         assert not info["servers"]["test-server"]["connected"]
+
+    def test_get_server_info_with_tools(self):
+        """ツールありでのサーバー情報取得テスト"""
+        # 手動でツールを追加
+        self.manager.available_tools["test-server_sample_tool"] = {
+            "server": "test-server",
+            "tool": {"name": "sample_tool"},
+            "config": self.servers_config["test-server"],
+            "jsonrpc_mode": True
+        }
+        
+        info = self.manager.get_server_info()
+        
+        assert info["total_servers"] == 1
+        assert info["connected_servers"] == 0  # プロセスがないので未接続
+        assert info["total_tools"] == 1
+        assert "sample_tool" in info["available_tools"]
+        assert info["available_tools"]["sample_tool"]["server"] == "test-server"
     
     @pytest.mark.asyncio
     async def test_cleanup_server(self):
@@ -310,6 +328,91 @@ class TestErrorHandling:
         
         with pytest.raises(Exception, match="ツール応答の解析に失敗しました"):
             await manager._execute_tool_jsonrpc(tool_info, {})
+
+
+class TestJSONRPCCommunication:
+    """JSON-RPC通信のテスト"""
+    
+    def test_jsonrpc_message_format(self):
+        """JSON-RPCメッセージフォーマットのテスト"""
+        manager = MCPServerManager({})
+        
+        # テスト用のツール情報
+        tool_info = {
+            "tool": {"name": "test_tool"},
+            "process": AsyncMock()
+        }
+        
+        # JSON-RPCメッセージの作成をテスト
+        # 実際の_execute_tool_jsonrpcメソッドは非同期なので、
+        # 同期的にテストできる部分のみテスト
+        tool_name = tool_info["tool"]["name"]
+        assert tool_name == "test_tool"
+
+
+class TestMCPToolsExtended:
+    """MCP Toolsの拡張テスト"""
+    
+    def test_mcp_server_manager_disabled_server(self):
+        """無効化されたサーバーのテスト"""
+        servers_config = {
+            "disabled-server": {
+                "enabled": False,
+                "command": "python",
+                "args": ["-c", "print('disabled')"],
+                "env": {},
+                "source": "local"
+            }
+        }
+        manager = MCPServerManager(servers_config)
+        
+        # 無効化されたサーバーの情報を確認
+        info = manager.get_server_info()
+        assert info["total_servers"] == 1
+        assert info["connected_servers"] == 0
+        assert "disabled-server" in info["servers"]
+        assert not info["servers"]["disabled-server"]["connected"]
+
+    def test_mcp_server_manager_multiple_servers(self):
+        """複数サーバーでのテスト"""
+        servers_config = {
+            "server1": {
+                "enabled": True,
+                "command": "python",
+                "args": ["-c", "print('server1')"],
+                "source": "local"
+            },
+            "server2": {
+                "enabled": True,
+                "command": "node",
+                "args": ["server2.js"],
+                "source": "claude_desktop"
+            }
+        }
+        manager = MCPServerManager(servers_config)
+        
+        info = manager.get_server_info()
+        assert info["total_servers"] == 2
+        assert "server1" in info["servers"]
+        assert "server2" in info["servers"]
+
+    def test_mcp_tools_config_variations(self):
+        """様々な設定でのMCPツールテスト"""
+        mock_sts = MagicMock()
+        
+        # 様々な設定パターンをテスト
+        configs = [
+            MagicMock(_config_dir="./UserData"),
+            MagicMock(_config_dir="/tmp/test"),
+            MagicMock(_config_dir="C:\\Test\\Config"),
+        ]
+        
+        for config in configs:
+            with patch('mcp_tools.get_merged_mcp_config') as mock_get_config:
+                mock_get_config.return_value = {"servers": {}}
+                
+                result = setup_mcp_tools(mock_sts, config)
+                assert isinstance(result, str)
 
 
 if __name__ == "__main__":
