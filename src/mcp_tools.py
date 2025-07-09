@@ -5,8 +5,7 @@ import json
 import logging
 import os
 import signal
-from typing import Dict, List, Optional, Any
-from claude_mcp_importer import get_merged_mcp_config
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 # デバッグログを有効化
@@ -23,9 +22,6 @@ class MCPServerManager:
         
     async def connect_server(self, server_name: str, server_config: dict):
         """MCPサーバーに接続（JSON-RPC方式のみ）"""
-        if not server_config.get("enabled", True):
-            logger.info(f"MCPサーバー '{server_name}' は無効化されています")
-            return
         
         logger.info(f"MCPサーバー '{server_name}' に接続中（JSON-RPC方式）...")
         
@@ -64,9 +60,9 @@ class MCPServerManager:
         
         try:
             # パッケージの存在確認（npm view コマンドを使用）
-            import subprocess
             import os
-            
+            import subprocess
+
             # Windows環境では空の環境変数辞書を渡すとエラーになるため、
             # 現在の環境変数をベースにして追加の環境変数をマージ
             full_env = os.environ.copy()
@@ -426,13 +422,11 @@ class MCPServerManager:
         for server_name in self.servers_config.keys():
             is_connected = server_name in connected_servers
             tool_count = len([t for t in self.available_tools.keys() if t.startswith(f"{server_name}_")])
-            source = self.servers_config[server_name].get("source", "local")
             connection_type = "jsonrpc" if server_name in self.server_processes else "none"
             
             servers_info[server_name] = {
                 "connected": is_connected,
                 "tool_count": tool_count,
-                "source": source,
                 "connection_type": connection_type
             }
         
@@ -449,30 +443,56 @@ mcp_manager = None
 _pending_mcp_init = None
 
 
-def setup_mcp_tools(sts, config, cocoro_dock_client=None):
+def setup_mcp_tools(sts, config, cocoro_dock_client=None, config_dir=None):
     """MCPツールをセットアップ（JSON-RPC直接通信版）"""
     global mcp_manager
     
-    # 設定ディレクトリを取得
-    config_dir = getattr(config, '_config_dir', './UserData')
-    if hasattr(config, 'get'):
-        # 辞書型の場合は、設定ディレクトリを推測
-        config_dir = './UserData'
+    # 設定ディレクトリを取得（config_loaderと同じロジック）
+    if config_dir is None:
+        config_dir = getattr(config, '_config_dir', None)
+        if config_dir is None:
+            # config_loaderと同じ方法で設定ディレクトリを特定
+            import sys
+            if getattr(sys, "frozen", False):
+                # PyInstallerなどで固められたexeの場合
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                # 通常のPythonスクリプトとして実行された場合
+                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            
+            config_dir = os.path.join(base_dir, "UserData")
+            
+            # 基本ディレクトリに設定ファイルがない場合は親ディレクトリを確認
+            setting_path = os.path.join(config_dir, "setting.json")
+            if not os.path.exists(setting_path):
+                parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                config_dir = os.path.join(parent_dir, "UserData")
+                
+                # 親ディレクトリに設定ファイルがない場合は親の親ディレクトリを確認
+                setting_path = os.path.join(config_dir, "setting.json")
+                if not os.path.exists(setting_path):
+                    grandparent_dir = os.path.dirname(parent_dir)
+                    config_dir = os.path.join(grandparent_dir, "UserData")
     
     try:
-        # Claude Desktop設定とマージしたMCP設定を取得
-        merged_config = get_merged_mcp_config(config_dir)
-        servers = merged_config.get("servers", {})
+        # MCP設定ファイルを読み込み
+        mcp_config_path = os.path.join(config_dir, "cocoroAiMcp.json")
+        
+        if not os.path.exists(mcp_config_path):
+            logger.info("MCPサーバー設定ファイルが見つかりません: " + mcp_config_path)
+            return ""
+        
+        with open(mcp_config_path, 'r', encoding='utf-8') as f:
+            config_data = json.load(f)
+        
+        servers = config_data.get("mcpServers", {})
         
         if not servers:
             logger.info("利用可能なMCPサーバーがありません")
             return ""
         
         # 設定されたサーバー数をログ出力
-        claude_servers = [name for name, cfg in servers.items() if cfg.get("source") == "claude_desktop"]
-        local_servers = [name for name, cfg in servers.items() if cfg.get("source") != "claude_desktop"]
-        
-        logger.info(f"MCP設定読み込み完了: Claude Desktop={len(claude_servers)}個, ローカル={len(local_servers)}個")
+        logger.info(f"MCP設定読み込み完了: {len(servers)}個のサーバー")
         
         # MCPサーバーマネージャーの初期化
         mcp_manager = MCPServerManager(servers)
@@ -500,18 +520,12 @@ def setup_mcp_tools(sts, config, cocoro_dock_client=None):
             _pending_mcp_init = initialize_mcp_system
         
         # システムプロンプトに追加する説明
-        claude_server_list = ", ".join([name.replace("claude_", "") for name in claude_servers]) if claude_servers else "なし"
-        local_server_list = ", ".join(local_servers) if local_servers else "なし"
+        server_list = ", ".join(servers.keys()) if servers else "なし"
         
         prompt_addition = (
             f"\n\n"
             f"MCPツールが利用可能です（JSON-RPC直接通信）:\n"
-            f"- Claude Desktopからインポート: {claude_server_list}\n"
-            f"- ローカル設定: {local_server_list}\n"
-            f"- ツール実行時にソース（[Claude]/[Local]）を表示\n"
-            f"- 直接JSON-RPC通信で動作（anyioライブラリ不要）\n"
-            f"- 実際のMCPサーバーと通信してツールを実行\n"
-            f"- 利用可能なツールは起動時に自動検出されます\n"
+            f"- 設定されたサーバー: {server_list}\n"
         )
         
         return prompt_addition
@@ -527,10 +541,6 @@ async def register_dynamic_tools(sts, manager: MCPServerManager, cocoro_dock_cli
     
     for tool_key, tool_info in manager.available_tools.items():
         tool = tool_info["tool"]
-        server_config = tool_info["config"]
-        
-        # ツール名にソース情報を追加
-        source_prefix = "[Claude]" if server_config.get("source") == "claude_desktop" else "[Local]"
         
         # MCPツールの入力スキーマをAIAvatarKit形式に変換
         # JSON-RPC方式では辞書形式でツール情報が返される
@@ -545,7 +555,7 @@ async def register_dynamic_tools(sts, manager: MCPServerManager, cocoro_dock_cli
             "type": "function",
             "function": {
                 "name": tool_key,
-                "description": f"{source_prefix} {description}",
+                "description": description,
                 "parameters": parameters
             }
         }

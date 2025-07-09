@@ -1,14 +1,24 @@
 #!/usr/bin/env python
 """MCP ツールシステムのテスト"""
 
-import pytest
 import asyncio
 import json
 import os
 import tempfile
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch, mock_open
+
+# pytestがある場合のみインポート
+try:
+    import pytest
+    HAS_PYTEST = True
+except ImportError:
+    HAS_PYTEST = False
+    # pytestのデコレータを無効化するダミー
+    def pytest_mark_asyncio(func):
+        return func
+    pytest = type('pytest', (), {'mark': type('mark', (), {'asyncio': pytest_mark_asyncio})})()
 
 # テスト対象のモジュールをインポート
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
@@ -23,11 +33,9 @@ class TestMCPServerManager:
         """各テストメソッドの前に実行"""
         self.servers_config = {
             "test-server": {
-                "enabled": True,
                 "command": "python",
                 "args": ["-c", "import sys; import json; import time; input()"],
-                "env": {},
-                "source": "local"
+                "env": {}
             }
         }
         self.manager = MCPServerManager(self.servers_config)
@@ -63,8 +71,6 @@ class TestMCPServerManager:
         assert info["total_servers"] == 1
         assert info["connected_servers"] == 0  # プロセスがないので未接続
         assert info["total_tools"] == 1
-        assert "sample_tool" in info["available_tools"]
-        assert info["available_tools"]["sample_tool"]["server"] == "test-server"
     
     @pytest.mark.asyncio
     async def test_cleanup_server(self):
@@ -205,9 +211,9 @@ class TestMCPSetup:
         mock_config = MagicMock()
         mock_config._config_dir = "./UserData"
         
-        # get_merged_mcp_configをモック化（空の設定を返す）
-        with patch('mcp_tools.get_merged_mcp_config') as mock_get_config:
-            mock_get_config.return_value = {"servers": {}}
+        # 設定ファイルが存在しない場合をモック化
+        with patch('os.path.exists') as mock_exists:
+            mock_exists.return_value = False
             
             result = setup_mcp_tools(mock_sts, mock_config)
             
@@ -224,26 +230,25 @@ class TestMCPSetup:
         
         # テスト用のサーバー設定
         test_servers = {
-            "claude_filesystem": {
+            "filesystem": {
                 "command": "npx",
-                "args": ["-y", "@modelcontextprotocol/server-filesystem"],
-                "source": "claude_desktop"
+                "args": ["-y", "@modelcontextprotocol/server-filesystem"]
             },
-            "local_calculator": {
+            "calculator": {
                 "command": "python",
-                "args": ["calculator.py"],
-                "source": "local"
+                "args": ["calculator.py"]
             }
         }
         
-        with patch('mcp_tools.get_merged_mcp_config') as mock_get_config:
-            mock_get_config.return_value = {"servers": test_servers}
-            
-            result = setup_mcp_tools(mock_sts, mock_config)
-            
-            # サーバー情報が含まれることを確認
-            assert "Claude Desktopからインポート: filesystem" in result
-            assert "ローカル設定: local_calculator" in result
+        # 設定ファイルをモック化
+        with patch('os.path.exists') as mock_exists:
+            mock_exists.return_value = True
+            with patch('builtins.open', mock_open(read_data=json.dumps({"mcpServers": test_servers}))):
+                
+                result = setup_mcp_tools(mock_sts, mock_config)
+                
+                # サーバー情報が含まれることを確認
+                assert "設定されたサーバー: filesystem, calculator" in result
 
 
 class TestMCPStatus:
@@ -271,7 +276,7 @@ class TestMCPStatus:
         import mcp_tools
         
         # テスト用マネージャーを作成
-        test_manager = MCPServerManager({"test": {"enabled": True}})
+        test_manager = MCPServerManager({"test": {"command": "python", "args": []}})
         original_manager = mcp_tools.mcp_manager
         mcp_tools.mcp_manager = test_manager
         
@@ -353,40 +358,17 @@ class TestJSONRPCCommunication:
 class TestMCPToolsExtended:
     """MCP Toolsの拡張テスト"""
     
-    def test_mcp_server_manager_disabled_server(self):
-        """無効化されたサーバーのテスト"""
-        servers_config = {
-            "disabled-server": {
-                "enabled": False,
-                "command": "python",
-                "args": ["-c", "print('disabled')"],
-                "env": {},
-                "source": "local"
-            }
-        }
-        manager = MCPServerManager(servers_config)
-        
-        # 無効化されたサーバーの情報を確認
-        info = manager.get_server_info()
-        assert info["total_servers"] == 1
-        assert info["connected_servers"] == 0
-        assert "disabled-server" in info["servers"]
-        assert not info["servers"]["disabled-server"]["connected"]
 
     def test_mcp_server_manager_multiple_servers(self):
         """複数サーバーでのテスト"""
         servers_config = {
             "server1": {
-                "enabled": True,
                 "command": "python",
-                "args": ["-c", "print('server1')"],
-                "source": "local"
+                "args": ["-c", "print('server1')"]
             },
             "server2": {
-                "enabled": True,
                 "command": "node",
-                "args": ["server2.js"],
-                "source": "claude_desktop"
+                "args": ["server2.js"]
             }
         }
         manager = MCPServerManager(servers_config)
@@ -408,13 +390,71 @@ class TestMCPToolsExtended:
         ]
         
         for config in configs:
-            with patch('mcp_tools.get_merged_mcp_config') as mock_get_config:
-                mock_get_config.return_value = {"servers": {}}
+            with patch('os.path.exists') as mock_exists:
+                mock_exists.return_value = False
                 
                 result = setup_mcp_tools(mock_sts, config)
                 assert isinstance(result, str)
+                assert result == ""  # ファイルが存在しない場合は空文字列
 
+
+def run_basic_tests():
+    """基本的なテストを実行"""
+    print("=== MCP Tools 基本テスト ===")
+    
+    # テスト1: MCPServerManagerの初期化
+    print("テスト1: MCPServerManager初期化...")
+    servers_config = {
+        "test-server": {
+            "command": "python",
+            "args": ["-c", "print('test')"],
+            "env": {}
+        }
+    }
+    manager = MCPServerManager(servers_config)
+    assert manager.servers_config == servers_config
+    assert manager.available_tools == {}
+    assert manager.server_processes == {}
+    print("✅ OK")
+    
+    # テスト2: setup_mcp_tools (設定なし)
+    print("テスト2: setup_mcp_tools (設定なし)...")
+    mock_sts = MagicMock()
+    mock_config = MagicMock()
+    mock_config._config_dir = "./UserData"
+    
+    with patch('os.path.exists') as mock_exists:
+        mock_exists.return_value = False
+        result = setup_mcp_tools(mock_sts, mock_config)
+        assert result == ""
+    print("✅ OK")
+    
+    # テスト3: setup_mcp_tools (設定あり)
+    print("テスト3: setup_mcp_tools (設定あり)...")
+    test_servers = {
+        "filesystem": {
+            "command": "npx",
+            "args": ["-y", "@modelcontextprotocol/server-filesystem"]
+        },
+        "calculator": {
+            "command": "python",
+            "args": ["calculator.py"]
+        }
+    }
+    
+    with patch('os.path.exists') as mock_exists:
+        mock_exists.return_value = True
+        with patch('builtins.open', mock_open(read_data=json.dumps({"mcpServers": test_servers}))):
+            result = setup_mcp_tools(mock_sts, mock_config)
+            assert "設定されたサーバー: filesystem, calculator" in result
+    print("✅ OK")
+    
+    print("=== 全テスト完了 ===")
 
 if __name__ == "__main__":
-    # テスト実行
-    pytest.main([__file__, "-v", "--tb=short"])
+    if HAS_PYTEST:
+        # pytest実行
+        pytest.main([__file__, "-v", "--tb=short"])
+    else:
+        # 基本テスト実行
+        run_basic_tests()

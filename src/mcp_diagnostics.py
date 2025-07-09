@@ -7,19 +7,50 @@ import os
 import shutil
 import subprocess
 from pathlib import Path
-from claude_mcp_importer import get_merged_mcp_config
 
 logger = logging.getLogger(__name__)
 
 
-async def diagnose_mcp_servers(config_dir: str = './UserData'):
+async def diagnose_mcp_servers(config_dir: str = None):
     """MCPサーバーの診断を実行"""
     logger.info("=== MCP サーバー診断を開始 ===")
     
     try:
-        # 設定を読み込み
-        merged_config = get_merged_mcp_config(config_dir)
-        servers = merged_config.get("servers", {})
+        # 設定ディレクトリを取得（config_loaderと同じロジック）
+        if config_dir is None:
+            import sys
+            if getattr(sys, "frozen", False):
+                # PyInstallerなどで固められたexeの場合
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                # 通常のPythonスクリプトとして実行された場合
+                base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            
+            config_dir = os.path.join(base_dir, "UserData")
+            
+            # 基本ディレクトリに設定ファイルがない場合は親ディレクトリを確認
+            setting_path = os.path.join(config_dir, "setting.json")
+            if not os.path.exists(setting_path):
+                parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                config_dir = os.path.join(parent_dir, "UserData")
+                
+                # 親ディレクトリに設定ファイルがない場合は親の親ディレクトリを確認
+                setting_path = os.path.join(config_dir, "setting.json")
+                if not os.path.exists(setting_path):
+                    grandparent_dir = os.path.dirname(parent_dir)
+                    config_dir = os.path.join(grandparent_dir, "UserData")
+        
+        # MCP設定ファイルを読み込み
+        mcp_config_path = os.path.join(config_dir, "cocoroAiMcp.json")
+        
+        if not os.path.exists(mcp_config_path):
+            logger.info("MCPサーバー設定ファイルが見つかりません: " + mcp_config_path)
+            return
+        
+        with open(mcp_config_path, 'r', encoding='utf-8') as f:
+            config_data = json.load(f)
+        
+        servers = config_data.get("mcpServers", {})
         
         if not servers:
             logger.info("診断対象のMCPサーバーがありません")
@@ -28,9 +59,6 @@ async def diagnose_mcp_servers(config_dir: str = './UserData'):
         for server_name, server_config in servers.items():
             logger.info(f"\n--- {server_name} の診断 ---")
             
-            if not server_config.get("enabled", True):
-                logger.info("❌ サーバーが無効化されています")
-                continue
             
             command = server_config.get("command", "")
             args = server_config.get("args", [])
