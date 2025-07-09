@@ -1,21 +1,21 @@
 @echo off
 chcp 65001 > nul
-echo CocoroCore ビルドツール
+echo CocoroCore Build Tool
 
-REM 仮想環境を有効化
-echo 仮想環境を有効化しています...
+REM Activate virtual environment
+echo Activating virtual environment...
 call .\.venv\Scripts\activate
 
-REM Pythonバージョン確認
+REM Check Python version
 python -c "import sys; print(f'Python {sys.version}')"
 
-REM 簡略化ビルドスクリプト実行
-echo ビルドスクリプトを実行中...
+REM Execute build script
+echo Running build script...
 python build_cocoro.py
 
-REM 仮想環境を終了
+REM Deactivate virtual environment
 call deactivate
 
 echo.
-echo 処理が完了しました。何かキーを押すと終了します。
+echo Build process completed. Press any key to exit.
 pause
