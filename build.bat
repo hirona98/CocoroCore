@@ -18,4 +18,3 @@ call deactivate
 
 echo.
 echo Build process completed. Press any key to exit.
-pause
