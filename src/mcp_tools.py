@@ -69,11 +69,19 @@ class MCPServerManager:
             if env:
                 full_env.update(env)
             
+            # Windows環境でコンソールウィンドウを非表示にする
+            import platform
+            creation_flags = 0
+            if platform.system() == "Windows":
+                import subprocess
+                creation_flags = subprocess.CREATE_NO_WINDOW
+            
             result = await asyncio.create_subprocess_exec(
                 "npm", "view", package_name, "name",
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                env=full_env
+                env=full_env,
+                creationflags=creation_flags
             )
             stdout, stderr = await asyncio.wait_for(result.communicate(), timeout=10.0)
             
@@ -126,13 +134,21 @@ class MCPServerManager:
             if not package_check:
                 raise ValueError(f"NPXパッケージが利用できません: {' '.join(args)}")
         
-        # プロセスを直接起動
+        # プロセスを直接起動（Windows環境でコンソールウィンドウを非表示）
+        import platform
+        creation_flags = 0
+        if platform.system() == "Windows":
+            # Windows環境でコンソールウィンドウを作成しない
+            import subprocess
+            creation_flags = subprocess.CREATE_NO_WINDOW
+        
         process = await asyncio.create_subprocess_exec(
             command, *args,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=processed_env
+            env=processed_env,
+            creationflags=creation_flags
         )
         
         logger.debug(f"MCPサーバープロセス起動成功 PID: {process.pid}")

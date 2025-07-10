@@ -192,12 +192,20 @@ async def diagnose_mcp_servers(config_dir: str = None):
                 # 現在の環境変数をベースにして追加の環境変数をマージ
                 full_env = processed_env  # 既にos.environ.copy()済み
                 
+                # Windows環境でコンソールウィンドウを非表示にする
+                import platform
+                creation_flags = 0
+                if platform.system() == "Windows":
+                    import subprocess
+                    creation_flags = subprocess.CREATE_NO_WINDOW
+                
                 process = await asyncio.create_subprocess_exec(
                     command, *args,
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
-                    env=full_env
+                    env=full_env,
+                    creationflags=creation_flags
                 )
                 
                 # プロセスの起動を確認
