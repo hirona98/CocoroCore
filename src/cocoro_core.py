@@ -548,6 +548,13 @@ def create_app(config_dir=None):
                         cocoro_dock_client.send_chat_message(role="user", content=request.text)
                     )
                     logger.debug(f"音声認識テキストをCocoroDockに送信: '{request.text}'")
+            
+            # メッセージ受信時に正面を向く処理
+            if cocoro_shell_client:
+                asyncio.create_task(
+                    cocoro_shell_client.send_control_command(command="lookForward")
+                )
+                logger.debug("正面を向くコマンドをCocoroShellに送信")
 
             if wakewords:
                 for wakeword in wakewords:
