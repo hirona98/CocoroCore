@@ -19,6 +19,7 @@ class MCPServerManager:
         self.servers_config = servers_config
         self.available_tools: Dict[str, Any] = {}
         self.server_processes = {}
+        self.tool_registration_log: List[str] = []  # ツール登録ログを保存
         
     async def connect_server(self, server_name: str, server_config: dict):
         """MCPサーバーに接続（JSON-RPC方式のみ）"""
@@ -205,7 +206,7 @@ class MCPServerManager:
                 return
             
             tools_response = json.loads(tools_response_line.decode('utf-8').strip())
-            logger.debug(f"ツールリスト応答: {tools_response}")
+            # logger.debug(f"ツールリスト応答: {tools_response}")
             
             # 3. ツール登録
             if 'result' in tools_response and 'tools' in tools_response['result']:
@@ -383,14 +384,9 @@ class MCPServerManager:
             server_tools = [key for key in self.available_tools.keys() if key.startswith(f"{server_name}_")]
             logger.info(f"  {server_name} (JSON-RPC): {len(server_tools)}個のツール")
         
-        # 接続に失敗した場合は診断を実行
+        # 接続に失敗した場合の情報をログに記録
         if connected_count == 0 and len(self.servers_config) > 0:
-            logger.info("すべてのMCPサーバー接続に失敗しました。診断を実行します...")
-            try:
-                from mcp_diagnostics import diagnose_mcp_servers
-                await diagnose_mcp_servers()
-            except Exception as e:
-                logger.error(f"MCP診断の実行に失敗: {e}")
+            logger.error("すべてのMCPサーバー接続に失敗しました。設定を確認してください。")
     
     async def execute_tool(self, tool_key: str, arguments: dict):
         """MCPツールを実行（JSON-RPC方式のみ）"""
@@ -598,13 +594,19 @@ async def register_dynamic_tools(sts, manager: MCPServerManager, cocoro_dock_cli
         try:
             sts.llm.tool(tool_spec)(execute_mcp_tool)
             registered_count += 1
+            log_message = f"登録成功: {tool_key} ({tool_info['server']}サーバー)"
             logger.debug(f"ツール登録成功: {tool_key}")
+            manager.tool_registration_log.append(log_message)
         except Exception as e:
+            log_message = f"登録失敗: {tool_key} - {e}"
             logger.error(f"ツール登録失敗: {tool_key} - {e}")
             logger.debug(f"tool_spec: {tool_spec}")
             logger.debug(f"tool info: {tool_info}")
+            manager.tool_registration_log.append(log_message)
     
-    logger.info(f"MCPツールの登録が完了しました: {registered_count}個のツール")
+    summary_message = f"{registered_count}個のツールを登録しました"
+    logger.info(summary_message)
+    manager.tool_registration_log.append(summary_message)
 
 
 async def get_mcp_status():
@@ -612,6 +614,12 @@ async def get_mcp_status():
     if mcp_manager:
         return mcp_manager.get_server_info()
     return {"error": "MCPマネージャーが初期化されていません"}
+
+def get_mcp_tool_registration_log():
+    """MCPツール登録ログを取得"""
+    if mcp_manager:
+        return mcp_manager.tool_registration_log
+    return []
 
 
 async def initialize_mcp_if_pending():

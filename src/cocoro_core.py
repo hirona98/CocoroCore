@@ -654,12 +654,15 @@ def create_app(config_dir=None):
         if memory_prompt_addition and memory_prompt_addition not in llm.system_prompt:
             llm.system_prompt = llm.system_prompt + memory_prompt_addition
 
-    # MCPツールをセットアップ
-    logger.info("MCPツールを初期化します")
-    mcp_prompt_addition = setup_mcp_tools(sts, config, cocoro_dock_client)
-    if mcp_prompt_addition:
-        llm.system_prompt = llm.system_prompt + mcp_prompt_addition
-        logger.info("MCPツールの説明をシステムプロンプトに追加しました")
+    # MCPツールをセットアップ（isEnableMcpがTrueの場合のみ）
+    if config.get("isEnableMcp", False):
+        logger.info("MCPツールを初期化します")
+        mcp_prompt_addition = setup_mcp_tools(sts, config, cocoro_dock_client)
+        if mcp_prompt_addition:
+            llm.system_prompt = llm.system_prompt + mcp_prompt_addition
+            logger.info("MCPツールの説明をシステムプロンプトに追加しました")
+    else:
+        logger.info("MCPツールは無効になっています")
     
     # MCPシステムのクリーンアップタスクを登録
     shutdown_handler.register_cleanup_task(shutdown_mcp_system, "MCP System")
@@ -904,8 +907,10 @@ def create_app(config_dir=None):
     @app.get("/health")
     async def health_check():
         """ヘルスチェック用エンドポイント"""
-        # MCP状態を取得
-        mcp_status = await get_mcp_status()
+        # MCP状態を取得（isEnableMcpがTrueの場合のみ）
+        mcp_status = None
+        if config.get("isEnableMcp", False):
+            mcp_status = await get_mcp_status()
         
         return {
             "status": "healthy",
@@ -917,17 +922,33 @@ def create_app(config_dir=None):
             "mcp_status": mcp_status,
         }
 
-    # MCP診断エンドポイント
-    @app.post("/api/mcp/diagnose")
-    async def mcp_diagnose():
-        """MCP診断を実行"""
+    # MCPツール登録ログ取得エンドポイント
+    @app.get("/api/mcp/tool-registration-log")
+    async def get_mcp_tool_registration_log():
+        """MCPツール登録ログを取得"""
+        # isEnableMcpがFalseの場合は空のログを返す
+        if not config.get("isEnableMcp", False):
+            return {
+                "status": "success",
+                "message": "MCPは無効になっています",
+                "logs": []
+            }
+        
         try:
-            from mcp_diagnostics import diagnose_mcp_servers
-            await diagnose_mcp_servers()
-            return {"status": "success", "message": "MCP診断が完了しました。ログを確認してください。"}
+            from mcp_tools import get_mcp_tool_registration_log
+            logs = get_mcp_tool_registration_log()
+            return {
+                "status": "success",
+                "message": f"{len(logs)}件のログを取得しました",
+                "logs": logs
+            }
         except Exception as e:
-            logger.error(f"MCP診断エラー: {e}")
-            return {"status": "error", "message": f"MCP診断に失敗しました: {str(e)}"}
+            logger.error(f"MCPツール登録ログ取得エラー: {e}")
+            return {
+                "status": "error",
+                "message": f"ログ取得に失敗しました: {e}",
+                "logs": []
+            }
 
     # 制御コマンドエンドポイント
     @app.post("/api/control")
