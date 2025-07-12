@@ -30,8 +30,14 @@ class MCPServerManager:
             await self._connect_server_jsonrpc(server_name, server_config)
             logger.info(f"MCPサーバー '{server_name}' 接続成功")
         except Exception as e:
+            import traceback
+            error_detail = traceback.format_exc()
             logger.error(f"MCPサーバー '{server_name}' の接続に失敗: {e}")
+            logger.debug(f"接続エラー詳細: {error_detail}")
             logger.warning(f"MCPサーバー '{server_name}' の接続をスキップします")
+            # 接続失敗の詳細ログを保存
+            failure_log = f"接続失敗: {server_name}サーバー - {e}\n詳細: {str(e)}\nトレース: {error_detail}"
+            self.tool_registration_log.append(failure_log)
     
     async def _check_npx_package(self, args: list, env: dict) -> bool:
         """npxパッケージが利用可能かチェック"""
@@ -127,13 +133,17 @@ class MCPServerManager:
         # コマンドの存在確認
         import shutil
         if not shutil.which(command):
-            raise ValueError(f"コマンドが見つかりません: {command}")
+            error_msg = f"コマンドが見つかりません: {command}"
+            self.tool_registration_log.append(f"コマンド確認失敗: {server_name}サーバー - {error_msg}")
+            raise ValueError(error_msg)
         
         # npxの場合はパッケージ確認
         if command == "npx" and args:
             package_check = await self._check_npx_package(args, processed_env)
             if not package_check:
-                raise ValueError(f"NPXパッケージが利用できません: {' '.join(args)}")
+                error_msg = f"NPXパッケージが利用できません: {' '.join(args)}"
+                self.tool_registration_log.append(f"パッケージ確認失敗: {server_name}サーバー - {error_msg}")
+                raise ValueError(error_msg)
         
         # プロセスを直接起動（Windows環境でコンソールウィンドウを非表示）
         import platform
@@ -234,11 +244,16 @@ class MCPServerManager:
                 
         except asyncio.TimeoutError:
             logger.error(f"MCPサーバー '{server_name}' の通信がタイムアウトしました")
+            self.tool_registration_log.append(f"JSON-RPC通信タイムアウト: {server_name}サーバー")
             process.terminate()
             await process.wait()
             raise
         except Exception as e:
+            import traceback
+            error_detail = traceback.format_exc()
             logger.error(f"MCPサーバー '{server_name}' のJSON-RPC接続でエラー: {e}")
+            logger.debug(f"JSON-RPCエラー詳細: {error_detail}")
+            self.tool_registration_log.append(f"JSON-RPC接続失敗: {server_name}サーバー - {e}\n詳細: {str(e)}\nトレース: {error_detail}")
             process.terminate()
             await process.wait()
             raise
@@ -366,12 +381,19 @@ class MCPServerManager:
                         await asyncio.sleep(2)  # 2秒待ってからリトライ
                     else:
                         logger.error(f"MCPサーバー '{server_name}' の接続がタイムアウトしました (最大試行回数到達)")
+                        timeout_log = f"最終失敗: {server_name}サーバー - 接続タイムアウト (最大試行回数{max_retries}回到達)"
+                        self.tool_registration_log.append(timeout_log)
                 except Exception as e:
                     if attempt < max_retries - 1:
                         logger.warning(f"MCPサーバー '{server_name}' の接続でエラー (試行 {attempt + 1}/{max_retries}): {e}")
                         await asyncio.sleep(2)  # 2秒待ってからリトライ
                     else:
+                        import traceback
+                        error_detail = traceback.format_exc()
                         logger.error(f"MCPサーバー '{server_name}' の接続でエラー (最大試行回数到達): {e}")
+                        logger.debug(f"最終エラー詳細: {error_detail}")
+                        final_failure_log = f"最終失敗: {server_name}サーバー - {e}\n試行回数: {max_retries}回\n詳細: {str(e)}\nトレース: {error_detail}"
+                        self.tool_registration_log.append(final_failure_log)
         
         # 接続されたサーバー数（JSON-RPCプロセスのみ）
         connected_servers = set(self.server_processes.keys())
@@ -384,9 +406,21 @@ class MCPServerManager:
             server_tools = [key for key in self.available_tools.keys() if key.startswith(f"{server_name}_")]
             logger.info(f"  {server_name} (JSON-RPC): {len(server_tools)}個のツール")
         
+        # 接続結果のサマリーをログに記録
+        total_configured = len(self.servers_config)
+        failed_count = total_configured - connected_count
+        
+        summary_log = f"MCP接続結果: 成功{connected_count}個、失敗{failed_count}個 (合計{total_configured}個)"
+        self.tool_registration_log.append(summary_log)
+        
         # 接続に失敗した場合の情報をログに記録
         if connected_count == 0 and len(self.servers_config) > 0:
             logger.error("すべてのMCPサーバー接続に失敗しました。設定を確認してください。")
+            self.tool_registration_log.append("警告: すべてのMCPサーバー接続に失敗しました")
+        elif failed_count > 0:
+            failed_servers = [name for name in self.servers_config.keys() if name not in connected_servers]
+            failed_list = ", ".join(failed_servers)
+            self.tool_registration_log.append(f"接続失敗サーバー: {failed_list}")
     
     async def execute_tool(self, tool_key: str, arguments: dict):
         """MCPツールを実行（JSON-RPC方式のみ）"""
@@ -598,10 +632,13 @@ async def register_dynamic_tools(sts, manager: MCPServerManager, cocoro_dock_cli
             logger.debug(f"ツール登録成功: {tool_key}")
             manager.tool_registration_log.append(log_message)
         except Exception as e:
-            log_message = f"登録失敗: {tool_key} - {e}"
+            import traceback
+            error_detail = traceback.format_exc()
+            log_message = f"登録失敗: {tool_key} - {e}\n詳細: {str(e)}\nトレース: {error_detail}"
             logger.error(f"ツール登録失敗: {tool_key} - {e}")
             logger.debug(f"tool_spec: {tool_spec}")
             logger.debug(f"tool info: {tool_info}")
+            logger.debug(f"エラー詳細: {error_detail}")
             manager.tool_registration_log.append(log_message)
     
     summary_message = f"{registered_count}個のツールを登録しました"
