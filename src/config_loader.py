@@ -75,6 +75,41 @@ def load_config(custom_config_dir=None):
         return {}
 
 
+def get_config_directory(custom_config_dir=None):
+    """設定ディレクトリのパスを取得する
+    
+    Args:
+        custom_config_dir (str, optional): カスタム設定ディレクトリパス
+        
+    Returns:
+        str: 設定ディレクトリのパス
+    """
+    if custom_config_dir:
+        return custom_config_dir
+    
+    # 実行ファイルのディレクトリを起点にUserDataフォルダを探す
+    if getattr(sys, "frozen", False):
+        # PyInstallerなどで固められたexeの場合
+        base_dir = os.path.dirname(sys.executable)
+    else:
+        # 通常のPythonスクリプトとして実行された場合
+        base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    config_dir = os.path.join(base_dir, "UserData")
+
+    # 基本ディレクトリにUserDataがない場合は親ディレクトリを確認
+    if not os.path.exists(config_dir):
+        parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        config_dir = os.path.join(parent_dir, "UserData")
+
+        # 親ディレクトリにUserDataがない場合は親の親ディレクトリを確認
+        if not os.path.exists(config_dir):
+            grandparent_dir = os.path.dirname(parent_dir)
+            config_dir = os.path.join(grandparent_dir, "UserData")
+
+    return config_dir
+
+
 if __name__ == "__main__":
     # スクリプトとして直接実行された場合、コマンドライン引数を解析して設定を読み込む
     args = parse_args()

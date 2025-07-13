@@ -2,9 +2,12 @@
 
 import asyncio
 import logging
+import os
 from typing import Callable, Optional
 
 from aiavatar.sts.llm.litellm import LiteLLMService
+from aiavatar.sts.llm.context_manager.base import SQLiteContextManager
+from config_loader import get_config_directory
 
 logger = logging.getLogger(__name__)
 
@@ -121,12 +124,18 @@ def create_llm_service(
     if not api_key:
         raise ValueError("APIキーが設定されていません。設定ファイルを確認してください。")
 
+    # UserDataフォルダにcontext.dbを保存するためのカスタムContextManager
+    config_dir = get_config_directory()
+    context_db_path = os.path.join(config_dir, "context.db")
+    context_manager = SQLiteContextManager(db_path=context_db_path)
+    
     # ベースLLMサービスを初期化
     base_llm = LiteLLMService(
         api_key=api_key,
         model=model,
         temperature=temperature,
         system_prompt=system_prompt,
+        context_manager=context_manager,
     )
 
     # ラッパーを適用
