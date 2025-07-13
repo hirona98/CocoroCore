@@ -130,7 +130,7 @@ class ChatMemoryClient:
         """記憶検索（高速）"""
         try:
             response = await self.client.post(
-                f"{self.base_url}/search",
+                f"{self.base_url}/search_direct",
                 json={
                     "user_id": user_id,
                     "query": query,
