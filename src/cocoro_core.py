@@ -5,7 +5,7 @@ import json
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Optional
 
 from aiavatar.adapter.http.server import AIAvatarHttpServer
@@ -246,7 +246,11 @@ def create_app(config_dir=None):
             except locale.Error:
                 pass  # ロケール設定に失敗してもフォールバック
 
-        now = datetime.now()
+        # UTC時間を取得してから日本時間に変換
+        now_utc = datetime.now(timezone.utc)
+        # 日本時間に変換（UTC+9）
+        jst_offset = timezone(timedelta(hours=9))
+        now = now_utc.astimezone(jst_offset)
         weekdays = ["月", "火", "水", "木", "金", "土", "日"]
         weekday_jp = weekdays[now.weekday()]
 
@@ -1020,7 +1024,7 @@ def create_app(config_dir=None):
             return {
                 "status": "success",
                 "message": "Shutdown requested",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         elif command == "sttControl":
             # STT（音声認識）制御
@@ -1043,19 +1047,19 @@ def create_app(config_dir=None):
                         return {
                             "status": "success",
                             "message": "STT enabled",
-                            "timestamp": datetime.now().isoformat(),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
                         }
                     else:
                         return {
                             "status": "error",
                             "message": "STT instances are not available (API key or VAD missing)",
-                            "timestamp": datetime.now().isoformat(),
+                            "timestamp": datetime.now(timezone.utc).isoformat(),
                         }
                 else:
                     return {
                         "status": "success",
                         "message": "STT is already enabled",
-                        "timestamp": datetime.now().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
             else:
                 # STTを無効化
@@ -1069,13 +1073,13 @@ def create_app(config_dir=None):
                     return {
                         "status": "success",
                         "message": "STT disabled",
-                        "timestamp": datetime.now().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
                 else:
                     return {
                         "status": "success",
                         "message": "STT is already disabled",
-                        "timestamp": datetime.now().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
         elif command == "microphoneControl":
             # マイクロフォン設定制御
@@ -1095,27 +1099,27 @@ def create_app(config_dir=None):
                         "message": "Microphone settings updated",
                         "autoAdjustment": auto_adjustment,
                         "inputThreshold": input_threshold,
-                        "timestamp": datetime.now().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
                 else:
                     logger.warning("VADインスタンスが利用できません")
                     return {
                         "status": "error",
                         "message": "VAD instance is not available",
-                        "timestamp": datetime.now().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                     }
             except Exception as e:
                 logger.error(f"マイクロフォン設定更新エラー: {e}")
                 return {
                     "status": "error",
                     "message": f"Microphone settings update error: {str(e)}",
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
         else:
             return {
                 "status": "error",
                 "message": f"Unknown command: {command}",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 
     # マイク入力タスクの管理
@@ -1168,7 +1172,7 @@ def create_app(config_dir=None):
             # デフォルトユーザーIDとセッションIDを設定（設定ファイルから読み込み）
             default_user_id = user_id
             # セッションIDの重複を防ぐためにマイクロ秒を追加
-            default_session_id = f"voice_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
+            default_session_id = f"voice_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')}"
 
             # VADにユーザーIDとコンテキストIDを設定
             vad_instance.set_session_data(

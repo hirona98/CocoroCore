@@ -1,7 +1,7 @@
 """セッション管理とタイムアウト処理"""
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -32,11 +32,11 @@ class SessionManager:
                 del self.sessions[oldest_key]
                 logger.warning(f"最大セッション数に達したため、古いセッションを削除: {oldest_key}")
             
-            self.sessions[session_key] = datetime.now()
+            self.sessions[session_key] = datetime.now(timezone.utc)
     
     async def get_timed_out_sessions(self) -> list:
         """タイムアウトしたセッションのリストを取得"""
-        current_time = datetime.now()
+        current_time = datetime.now(timezone.utc)
         timeout_threshold = current_time - timedelta(seconds=self.timeout_seconds)
         
         timed_out = []

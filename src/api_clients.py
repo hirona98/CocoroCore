@@ -5,7 +5,7 @@ REST API クライアント実装
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 import httpx
@@ -36,7 +36,7 @@ class CocoroDockClient:
         Returns:
             成功時True、失敗時False
         """
-        payload = {"role": role, "content": content, "timestamp": datetime.now().isoformat()}
+        payload = {"role": role, "content": content, "timestamp": datetime.now(timezone.utc).isoformat()}
 
         try:
             response = await self.client.post(f"{self.base_url}/api/addChatUi", json=payload)
@@ -122,7 +122,7 @@ class CocoroDockClient:
         Returns:
             成功時True、失敗時False
         """
-        payload = {"message": message, "timestamp": datetime.now().isoformat()}
+        payload = {"message": message, "timestamp": datetime.now(timezone.utc).isoformat()}
         if status_type:
             payload["type"] = status_type
 
