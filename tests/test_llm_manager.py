@@ -11,6 +11,8 @@ sys.modules['aiavatar'] = MagicMock()
 sys.modules['aiavatar.sts'] = MagicMock()
 sys.modules['aiavatar.sts.llm'] = MagicMock()
 sys.modules['aiavatar.sts.llm.litellm'] = MagicMock()
+sys.modules['aiavatar.sts.llm.context_manager'] = MagicMock()
+sys.modules['aiavatar.sts.llm.context_manager.base'] = MagicMock()
 
 from llm_manager import LLMStatusManager, LLMWithSharedContext, create_llm_service
 
@@ -257,9 +259,14 @@ class TestCreateLLMService(unittest.TestCase):
     """create_llm_service 関数のテストクラス"""
 
     @patch('llm_manager.LiteLLMService')
-    def test_create_llm_service_basic(self, mock_litellm_service):
+    @patch('llm_manager.SQLiteContextManager')
+    @patch('llm_manager.get_config_directory')
+    def test_create_llm_service_basic(self, mock_get_config_directory, mock_sqlite_context_manager, mock_litellm_service):
         """基本的なLLMサービス作成テスト"""
         # モック設定
+        mock_get_config_directory.return_value = "/test/config"
+        mock_context_manager = MagicMock()
+        mock_sqlite_context_manager.return_value = mock_context_manager
         mock_base_llm = MagicMock()
         mock_litellm_service.return_value = mock_base_llm
         
@@ -270,12 +277,16 @@ class TestCreateLLMService(unittest.TestCase):
             system_prompt="You are a helpful assistant."
         )
         
+        # SQLiteContextManagerが正しいパスで呼ばれることを確認
+        mock_sqlite_context_manager.assert_called_once_with(db_path="/test/config\\context.db")
+        
         # LiteLLMServiceが正しい引数で呼ばれることを確認
         mock_litellm_service.assert_called_once_with(
             api_key="test_api_key",
             model="gpt-3.5-turbo",
             temperature=1.0,
-            system_prompt="You are a helpful assistant."
+            system_prompt="You are a helpful assistant.",
+            context_manager=mock_context_manager
         )
         
         # 戻り値がLLMWithSharedContextであることを確認
@@ -283,8 +294,13 @@ class TestCreateLLMService(unittest.TestCase):
         self.assertEqual(result.base_llm, mock_base_llm)
 
     @patch('llm_manager.LiteLLMService')
-    def test_create_llm_service_with_context_provider(self, mock_litellm_service):
+    @patch('llm_manager.SQLiteContextManager')
+    @patch('llm_manager.get_config_directory')
+    def test_create_llm_service_with_context_provider(self, mock_get_config_directory, mock_sqlite_context_manager, mock_litellm_service):
         """コンテキストプロバイダー付きでのLLMサービス作成テスト"""
+        mock_get_config_directory.return_value = "/test/config"
+        mock_context_manager = MagicMock()
+        mock_sqlite_context_manager.return_value = mock_context_manager
         mock_base_llm = MagicMock()
         mock_litellm_service.return_value = mock_base_llm
         mock_context_provider = MagicMock()
@@ -302,7 +318,8 @@ class TestCreateLLMService(unittest.TestCase):
             api_key="test_api_key",
             model="gpt-4",
             temperature=0.7,
-            system_prompt="System prompt"
+            system_prompt="System prompt",
+            context_manager=mock_context_manager
         )
         
         # コンテキストプロバイダーが設定されることを確認
@@ -331,8 +348,13 @@ class TestCreateLLMService(unittest.TestCase):
         self.assertIn("APIキーが設定されていません", str(context.exception))
 
     @patch('llm_manager.LiteLLMService')
-    def test_create_llm_service_default_temperature(self, mock_litellm_service):
+    @patch('llm_manager.SQLiteContextManager')
+    @patch('llm_manager.get_config_directory')
+    def test_create_llm_service_default_temperature(self, mock_get_config_directory, mock_sqlite_context_manager, mock_litellm_service):
         """デフォルト温度設定でのLLMサービス作成テスト"""
+        mock_get_config_directory.return_value = "/test/config"
+        mock_context_manager = MagicMock()
+        mock_sqlite_context_manager.return_value = mock_context_manager
         mock_base_llm = MagicMock()
         mock_litellm_service.return_value = mock_base_llm
         
@@ -348,7 +370,8 @@ class TestCreateLLMService(unittest.TestCase):
             api_key="test_api_key",
             model="gpt-3.5-turbo",
             temperature=1.0,
-            system_prompt="System prompt"
+            system_prompt="System prompt",
+            context_manager=mock_context_manager
         )
 
 
@@ -356,9 +379,14 @@ class TestLLMManagerIntegration(unittest.IsolatedAsyncioTestCase):
     """llm_manager の統合テストクラス"""
 
     @patch('llm_manager.LiteLLMService')
-    async def test_integration_status_manager_with_llm_service(self, mock_litellm_service):
+    @patch('llm_manager.SQLiteContextManager')
+    @patch('llm_manager.get_config_directory')
+    async def test_integration_status_manager_with_llm_service(self, mock_get_config_directory, mock_sqlite_context_manager, mock_litellm_service):
         """ステータスマネージャーとLLMサービスの統合テスト"""
         # LLMサービス作成
+        mock_get_config_directory.return_value = "/test/config"
+        mock_context_manager = MagicMock()
+        mock_sqlite_context_manager.return_value = mock_context_manager
         mock_base_llm = MagicMock()
         mock_litellm_service.return_value = mock_base_llm
         

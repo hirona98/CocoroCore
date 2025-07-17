@@ -88,10 +88,13 @@ def parse_image_response(response_text: str) -> dict:
     return result
 
 
-async def generate_image_description(image_url: str, user_id: str) -> Optional[str]:
-    """画像の説明を生成"""
+async def generate_image_description(image_urls: list[str], user_id: str) -> Optional[str]:
+    """画像の説明を生成（複数画像対応）"""
     try:
         import litellm
+
+        if not image_urls:
+            return None
 
         # LLMクライアントの設定を取得
         config = load_config()
@@ -110,40 +113,70 @@ async def generate_image_description(image_url: str, user_id: str) -> Optional[s
             logger.warning("APIキーが設定されていないため、画像説明の生成をスキップします")
             return None
             
+        # システムプロンプトを画像数に応じて調整
+        if len(image_urls) == 1:
+            system_prompt = (
+                "画像が送られた場合、以下の形式で応答してください：\n\n"
+                "反応: [キャラクターとしての自然な反応]\n"
+                "記憶: [この画像の詳細で客観的な説明]\n"
+                "分類: [カテゴリ] / [雰囲気] / [時間帯]\n\n"
+                "記憶の説明は簡潔かつ的確に、以下を含めてください：\n"
+                "- 画像の種類（写真/イラスト/スクリーンショット/図表など）\n"
+                "- 内容や被写体\n"
+                "- 色彩や特徴\n"
+                "- 文字情報があれば記載\n"
+                "例：\n"
+                "反応: わあ！素敵な遊園地のイラストですね！観覧車がとても大きくて楽しそうです。\n"
+                "記憶: 後楽園遊園地を描いたカラーイラスト。中央に白い観覧車と赤いゴンドラ、右側に青黄ストライプのメリーゴーラウンド。青空の下、来園者が散歩している平和な風景。\n"
+                "分類: 風景 / 楽しい / 昼\n\n"
+                "分類の選択肢：\n"
+                "- カテゴリ: 風景/人物/食事/建物/画面（プログラム）/画面（SNS）/画面（ゲーム）/画面（買い物）/画面（鑑賞）/[その他任意の分類]\n"
+                "- 雰囲気: 明るい/楽しい/悲しい/静か/賑やか/[その他任意の分類]\n"
+                "- 時間帯: 朝/昼/夕方/夜/不明"
+            )
+            user_text = "この画像について教えてください。"
+        else:
+            system_prompt = (
+                f"複数の画像（{len(image_urls)}枚）が送られた場合、以下の形式で応答してください：\n\n"
+                "反応: [キャラクターとしての自然な反応]\n"
+                "記憶: [すべての画像の詳細で客観的な説明]\n"
+                "分類: [主要カテゴリ] / [全体的な雰囲気] / [時間帯]\n\n"
+                "記憶の説明は簡潔かつ的確に、以下を含めてください：\n"
+                "- 各画像の種類（写真/イラスト/スクリーンショット/図表など）\n"
+                "- 内容や被写体\n"
+                "- 色彩や特徴\n"
+                "- 文字情報があれば記載\n"
+                "- 画像間の関連性があれば記載\n"
+                "例：\n"
+                "反応: わあ！素敵な写真を複数枚ありがとうございます！どれも楽しそうですね。\n"
+                "記憶: 1枚目：後楽園遊園地を描いたカラーイラスト。中央に白い観覧車と赤いゴンドラ。2枚目：同じ遊園地の夜景写真。ライトアップされた観覧車が美しい。関連性：同じ遊園地の昼と夜の風景。\n"
+                "分類: 風景 / 楽しい / 昼夜\n\n"
+                "分類の選択肢：\n"
+                "- カテゴリ: 風景/人物/食事/建物/画面（プログラム）/画面（SNS）/画面（ゲーム）/画面（買い物）/画面（鑑賞）/[その他任意の分類]\n"
+                "- 雰囲気: 明るい/楽しい/悲しい/静か/賑やか/[その他任意の分類]\n"
+                "- 時間帯: 朝/昼/夕方/夜/不明"
+            )
+            user_text = f"これら{len(image_urls)}枚の画像について教えてください。"
+        
+        # メッセージコンテンツを構築
+        user_content = []
+        for i, image_url in enumerate(image_urls):
+            user_content.append({"type": "image_url", "image_url": {"url": image_url}})
+        user_content.append({"type": "text", "text": user_text})
+            
         # Vision APIで画像の反応と説明を生成
         response = await litellm.acompletion(
             model=model,
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "画像が送られた場合、以下の形式で応答してください：\n\n"
-                        "反応: [キャラクターとしての自然な反応]\n"
-                        "記憶: [この画像の詳細で客観的な説明]\n"
-                        "分類: [カテゴリ] / [雰囲気] / [時間帯]\n\n"
-                        "記憶の説明は簡潔かつ的確に、以下を含めてください：\n"
-                        "- 画像の種類（写真/イラスト/スクリーンショット/図表など）\n"
-                        "- 内容や被写体\n"
-                        "- 色彩や特徴\n"
-                        "- 文字情報があれば記載\n"
-                        "例：\n"
-                        "反応: わあ！素敵な遊園地のイラストですね！観覧車がとても大きくて楽しそうです。\n"
-                        "記憶: 後楽園遊園地を描いたカラーイラスト。中央に白い観覧車と赤いゴンドラ、右側に青黄ストライプのメリーゴーラウンド。青空の下、来園者が散歩している平和な風景。\n"
-                        "分類: 風景 / 楽しい / 昼\n\n"
-                        "分類の選択肢：\n"
-                        "- カテゴリ: 風景/人物/食事/建物/画面（プログラム）/画面（SNS）/画面（ゲーム）/画面（買い物）/画面（鑑賞）/[その他任意の分類]\n"
-                        "- 雰囲気: 明るい/楽しい/悲しい/静か/賑やか/[その他任意の分類]\n"
-                        "- 時間帯: 朝/昼/夕方/夜/不明"
-                    ),
-                },
-                {"role": "user", "content": [{"type": "image_url", "image_url": {"url": image_url}}, {"type": "text", "text": "この画像について教えてください。"}]},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
             ],
             api_key=api_key,
             temperature=0.3,
         )
         
         full_response = response.choices[0].message.content
-        logger.info(f"画像応答を生成しました: {full_response[:50]}...")
+        logger.info(f"画像応答を生成しました（{len(image_urls)}枚）: {full_response[:50]}...")
         return full_response
         
     except Exception as e:
@@ -597,9 +630,12 @@ def create_app(config_dir=None):
         # 画像がある場合は応答を生成してパース
         if request.files and len(request.files) > 0:
             try:
+                # 画像URLのリストを作成
+                image_urls = [file["url"] for file in request.files]
+                
                 # 画像の応答（反応+記憶+分類）を生成
                 image_response = await generate_image_description(
-                    request.files[0]["url"], 
+                    image_urls, 
                     request.user_id or "default_user"
                 )
                 
@@ -614,16 +650,32 @@ def create_app(config_dir=None):
                     request.metadata['image_category'] = parsed_data.get('category', '')
                     request.metadata['image_mood'] = parsed_data.get('mood', '')
                     request.metadata['image_time'] = parsed_data.get('time', '')
+                    request.metadata['image_count'] = len(image_urls)
                     
                     # ユーザーのメッセージに画像情報を追加
                     original_text = request.text or ""
                     description = parsed_data.get('description', '画像が共有されました')
-                    if original_text:
-                        request.text = f"[画像を共有しました: {description}]\n{original_text}"
-                    else:
-                        request.text = f"[画像を共有しました: {description}]"
                     
-                    logger.info(f"画像情報をリクエストに追加: カテゴリ={parsed_data.get('category')}, 雰囲気={parsed_data.get('mood')}")
+                    # 通知の画像かどうかを判断
+                    is_notification = request.metadata and request.metadata.get('is_notification', False)
+                    if is_notification:
+                        notification_from = request.metadata.get('notification_from', '不明なアプリ')
+                        if len(image_urls) == 1:
+                            image_prefix = f"[{notification_from}から画像付き通知: {description}]"
+                        else:
+                            image_prefix = f"[{notification_from}から{len(image_urls)}枚の画像付き通知: {description}]"
+                    else:
+                        if len(image_urls) == 1:
+                            image_prefix = f"[画像を共有しました: {description}]"
+                        else:
+                            image_prefix = f"[{len(image_urls)}枚の画像を共有しました: {description}]"
+                    
+                    if original_text:
+                        request.text = f"{image_prefix}\n{original_text}"
+                    else:
+                        request.text = image_prefix
+                    
+                    logger.info(f"画像情報をリクエストに追加: カテゴリ={parsed_data.get('category')}, 雰囲気={parsed_data.get('mood')}, 通知={is_notification}, 画像数={len(image_urls)}")
             except Exception as e:
                 logger.error(f"画像処理に失敗しました: {e}")
 
