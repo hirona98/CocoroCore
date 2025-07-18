@@ -384,10 +384,11 @@ def create_app(config_dir=None):
 
         # 定期調整タスクはアプリ起動後に開始（startup_eventで実行）
 
-        # ウェイクワードの設定
+        # ウェイクワードの設定（カンマ区切りで複数対応）
         if stt_wake_word:
-            wakewords = [stt_wake_word]
-            logger.info(f"ウェイクワードを設定: {stt_wake_word}")
+            # カンマ区切りで分割して空でない項目のみを取得
+            wakewords = [word.strip() for word in stt_wake_word.split(',') if word.strip()]
+            logger.info(f"ウェイクワードを設定: {wakewords}")
 
         # is_use_sttの状態をログ出力
         if is_use_stt:
