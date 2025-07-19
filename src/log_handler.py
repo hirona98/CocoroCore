@@ -119,10 +119,35 @@ class CocoroDockLogHandler(logging.Handler):
     def _send_buffered_logs(self):
         """バッファ内のログを送信"""
         try:
-            # バッファ内のログを順次送信
-            for log_message in self._startup_buffer:
-                self._schedule_send(log_message)
-            # 送信後にバッファをクリア
+            buffer_count = len(self._startup_buffer)
+            # バッファをコピー（非同期送信中にクリアされないように）
+            buffer_copy = self._startup_buffer.copy()
+            
+            # 非同期タスクでバッファ送信を処理
+            async def send_all_buffered():
+                # バッファ内のログを順次送信
+                for log_message in buffer_copy:
+                    await self._send_log_async(log_message)
+                
+                # セパレーターメッセージを送信
+                if buffer_count > 0:
+                    separator_message = {
+                        "timestamp": datetime.utcnow().isoformat() + "Z",
+                        "level": "INFO",
+                        "component": "SEPARATOR",
+                        "message": f"─── CocoroCore 起動時ログ（{buffer_count}件）ここまで ───"
+                    }
+                    await self._send_log_async(separator_message)
+            
+            # タスクをスケジュール
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(send_all_buffered())
+            except RuntimeError:
+                # イベントループが実行されていない場合はスキップ
+                pass
+            
+            # 送信タスク作成後にバッファをクリア
             self._startup_buffer.clear()
         except Exception as e:
             # エラーログは出力しない（無限ループを防ぐため）
