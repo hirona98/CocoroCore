@@ -22,6 +22,8 @@ class CocoroDockLogHandler(logging.Handler):
         self._enabled = False
         self._client: Optional[httpx.AsyncClient] = None
         self._loop: Optional[asyncio.AbstractEventLoop] = None
+        self._startup_buffer = []  # 起動時ログ用バッファ（最大500件）
+        self._buffer_sent = False  # バッファ送信済みフラグ
         
     def set_enabled(self, enabled: bool):
         """ログ送信の有効/無効を設定"""
@@ -42,9 +44,6 @@ class CocoroDockLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord):
         """ログレコードを処理してCocoroDockに送信"""
-        if not self._enabled or self._client is None:
-            return
-
         try:
             # httpxのapi/logsリクエストログを除外（無限ループ防止）
             if (record.name == "httpx" and 
@@ -59,7 +58,18 @@ class CocoroDockLogHandler(logging.Handler):
                 "message": self.format(record)
             }
 
-            # 非同期送信をスケジュール
+            if not self._enabled or self._client is None:
+                # ログ送信が無効の場合はバッファに保存（最大500件まで）
+                if len(self._startup_buffer) < 500:
+                    self._startup_buffer.append(log_message)
+                return
+
+            # 初回有効化時にバッファ内容を送信
+            if not self._buffer_sent:
+                self._send_buffered_logs()
+                self._buffer_sent = True
+
+            # 通常のリアルタイム送信
             self._schedule_send(log_message)
 
         except Exception as e:
@@ -103,6 +113,18 @@ class CocoroDockLogHandler(logging.Handler):
             pass
         except Exception as e:
             # その他のエラーもサイレントに処理
+            # エラーログは出力しない（無限ループを防ぐため）
+            pass
+
+    def _send_buffered_logs(self):
+        """バッファ内のログを送信"""
+        try:
+            # バッファ内のログを順次送信
+            for log_message in self._startup_buffer:
+                self._schedule_send(log_message)
+            # 送信後にバッファをクリア
+            self._startup_buffer.clear()
+        except Exception as e:
             # エラーログは出力しない（無限ループを防ぐため）
             pass
 
