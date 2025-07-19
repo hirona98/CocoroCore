@@ -1,7 +1,7 @@
 """session_manager.py のユニットテスト"""
 import asyncio
 import unittest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, AsyncMock
 import sys
 import os
@@ -111,7 +111,7 @@ class TestSessionManager(unittest.IsolatedAsyncioTestCase):
         await short_timeout_manager.update_activity("user2", "session2")
         
         # 過去の時間にセッションを設定（タイムアウトをシミュレート）
-        past_time = datetime.now() - timedelta(seconds=2)
+        past_time = datetime.now(timezone.utc) - timedelta(seconds=2)
         short_timeout_manager.sessions["user1:session1"] = past_time
         
         # タイムアウトしたセッションを取得
@@ -228,7 +228,7 @@ class TestSessionManager(unittest.IsolatedAsyncioTestCase):
         await exact_timeout_manager.update_activity("user1", "session1")
         
         # タイムアウト時間を少し超えた時間に設定（境界値＋マージン）
-        past_time = datetime.now() - timedelta(seconds=1.1)
+        past_time = datetime.now(timezone.utc) - timedelta(seconds=1.1)
         exact_timeout_manager.sessions["user1:session1"] = past_time
         
         # タイムアウトしたセッションを取得
@@ -276,7 +276,7 @@ class TestCreateTimeoutChecker(unittest.IsolatedAsyncioTestCase):
         
         # タイムアウトしたセッションを作成
         await self.session_manager.update_activity("user1", "session1")
-        past_time = datetime.now() - timedelta(seconds=2)
+        past_time = datetime.now(timezone.utc) - timedelta(seconds=2)
         self.session_manager.sessions["user1:session1"] = past_time
         
         # タイムアウトチェッカーを短時間実行
@@ -303,7 +303,7 @@ class TestCreateTimeoutChecker(unittest.IsolatedAsyncioTestCase):
         await self.session_manager.update_activity("user2", "session2")
         
         # user1のセッションをタイムアウトさせる
-        past_time = datetime.now() - timedelta(seconds=2)
+        past_time = datetime.now(timezone.utc) - timedelta(seconds=2)
         self.session_manager.sessions["user1:session1"] = past_time
         
         # チェッカーを短時間実行
@@ -332,7 +332,7 @@ class TestCreateTimeoutChecker(unittest.IsolatedAsyncioTestCase):
         
         # タイムアウトしたセッションを作成
         await self.session_manager.update_activity("user1", "session1")
-        past_time = datetime.now() - timedelta(seconds=2)
+        past_time = datetime.now(timezone.utc) - timedelta(seconds=2)
         self.session_manager.sessions["user1:session1"] = past_time
         
         # エラーが発生してもチェッカーが継続することを確認
