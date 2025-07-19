@@ -27,7 +27,9 @@ class CocoroDockLogHandler(logging.Handler):
         
     def set_enabled(self, enabled: bool):
         """ログ送信の有効/無効を設定"""
+        was_enabled = self._enabled
         self._enabled = enabled
+        
         if enabled and self._client is None:
             # 非同期クライアントを初期化
             self._client = httpx.AsyncClient(
@@ -41,6 +43,11 @@ class CocoroDockLogHandler(logging.Handler):
             except Exception:
                 pass
             self._client = None
+        
+        # 新たに有効化された時、直接バッファ送信を実行
+        if enabled and not was_enabled and not self._buffer_sent:
+            self._send_buffered_logs()
+            self._buffer_sent = True
 
     def emit(self, record: logging.LogRecord):
         """ログレコードを処理してCocoroDockに送信"""
