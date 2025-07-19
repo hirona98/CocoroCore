@@ -54,6 +54,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# CocoroDock用ログハンドラーの初期化（グローバル変数として宣言のみ）
+dock_log_handler = None
+
 
 
 
@@ -200,6 +203,38 @@ def create_app(config_dir=None):
     config_warnings = validate_config(config)
     for warning in config_warnings:
         logger.warning(f"設定警告: {warning}")
+
+    # CocoroDock用ログハンドラーの初期化（設定読み込み後に実行）
+    global dock_log_handler
+    try:
+        from log_handler import CocoroDockLogHandler
+        # 設定からCocoroDockのポート番号を取得
+        dock_port = config.get("cocoroDockPort", 55600)
+        dock_url = f"http://127.0.0.1:{dock_port}"
+        dock_log_handler = CocoroDockLogHandler(dock_url=dock_url, component_name="CocoroCore")
+        dock_log_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
+        
+        # ルートロガーに追加して、すべてのライブラリのログを取得
+        root_logger = logging.getLogger()
+        root_logger.addHandler(dock_log_handler)
+        
+        # 初期状態は無効
+        dock_log_handler.set_enabled(False)
+        
+        # 特定のライブラリのログレベルを調整
+        # httpxのログを表示したい場合
+        logging.getLogger("httpx").setLevel(logging.INFO)
+        
+        logger.info("CocoroDockログハンドラーを初期化しました")
+        
+    except ImportError as e:
+        # CocoroDockログハンドラーのインポートに失敗
+        logger.warning(f"CocoroDockログハンドラーのインポートに失敗: {e}")
+        dock_log_handler = None
+    except Exception as e:
+        # CocoroDockログハンドラーの初期化に失敗
+        logger.warning(f"CocoroDockログハンドラーの初期化に失敗: {e}")
+        dock_log_handler = None
 
     # デバッグモード設定
     debug_mode = config.get("debug", False)
@@ -1114,6 +1149,55 @@ def create_app(config_dir=None):
                 return {
                     "status": "error",
                     "message": f"Microphone settings update error: {str(e)}",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+        elif command == "start_log_forwarding":
+            # ログ転送開始
+            try:
+                if dock_log_handler is not None:
+                    dock_log_handler.set_enabled(True)
+                    logger.info("ログ転送を開始しました")
+                    return {
+                        "status": "success",
+                        "message": "Log forwarding started",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                else:
+                    logger.warning("ログハンドラーが利用できません")
+                    return {
+                        "status": "error",
+                        "message": "Log handler is not available",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+            except Exception as e:
+                logger.error(f"ログ転送開始エラー: {e}")
+                return {
+                    "status": "error",
+                    "message": f"Log forwarding start error: {str(e)}",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                }
+        elif command == "stop_log_forwarding":
+            # ログ転送停止
+            try:
+                if dock_log_handler is not None:
+                    dock_log_handler.set_enabled(False)
+                    logger.info("ログ転送を停止しました")
+                    return {
+                        "status": "success",
+                        "message": "Log forwarding stopped",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                else:
+                    return {
+                        "status": "success",
+                        "message": "Log forwarding was already stopped",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+            except Exception as e:
+                logger.error(f"ログ転送停止エラー: {e}")
+                return {
+                    "status": "error",
+                    "message": f"Log forwarding stop error: {str(e)}",
                     "timestamp": datetime.now(timezone.utc).isoformat(),
                 }
         else:
