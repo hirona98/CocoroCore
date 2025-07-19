@@ -225,6 +225,14 @@ def create_app(config_dir=None):
         # httpxのログを表示したい場合
         logging.getLogger("httpx").setLevel(logging.INFO)
         
+        # httpxの /api/logs リクエストを非表示にするためのフィルター
+        class ApiLogsFilter(logging.Filter):
+            def filter(self, record):
+                return not ("/api/logs" in record.getMessage())
+        
+        # httpxロガーにフィルターを追加
+        logging.getLogger("httpx").addFilter(ApiLogsFilter())
+        
         logger.info("CocoroDockログハンドラーを初期化しました")
         
     except ImportError as e:
