@@ -36,6 +36,7 @@ from config_loader import load_config
 from config_validator import validate_config
 from dummy_db import DummyPerformanceRecorder, DummyVoiceRecorder
 from endpoints import setup_endpoints
+from event_handlers import AppEventHandlers
 from hook_processor import RequestHookProcessor
 from image_processor import parse_image_response, generate_image_description
 from llm_manager import LLMStatusManager, create_llm_service
@@ -53,6 +54,8 @@ from stt_manager import create_stt_service
 from time_utils import generate_current_time_info, create_time_guidelines
 from prompt_utils import add_system_prompts
 from response_processor import ResponseProcessor
+from sts_configurator import STSConfigurator
+from tools_configurator import ToolsConfigurator
 from voice_processor import process_mic_input
 from vad_manager import SmartVoiceDetector, VADEventHandler
 
@@ -141,10 +144,7 @@ def create_app(config_dir=None):
         temperature=1.0,
     )
 
-    # 音声合成はCocoroShell側で行うためダミーを使用
-    custom_tts = SpeechSynthesizerDummy()
-
-    # STTインスタンスの初期化（APIキーがあれば常に作成）
+    # STT/VAD/音声記録の初期化
     stt_instance = None
     voice_recorder_instance = None
     voice_recorder_enabled = False
@@ -175,10 +175,6 @@ def create_app(config_dir=None):
             voice_recorder_instance = DummyVoiceRecorder()
 
         # VAD（音声アクティビティ検出）の設定（常に作成）
-        # shared_context_idのプロバイダー関数を定義
-        def get_shared_context_id():
-            return shared_context_id
-
         vad_instance = SmartVoiceDetector(
             context_provider=get_shared_context_id,
             dock_client=cocoro_dock_client,
@@ -190,8 +186,6 @@ def create_app(config_dir=None):
             sample_rate=16000,
             debug=debug_mode,
         )
-
-        # 定期調整タスクはアプリ起動後に開始（startup_eventで実行）
 
         # ウェイクワードの設定（カンマ区切りで複数対応）
         if stt_wake_word:
@@ -207,83 +201,17 @@ def create_app(config_dir=None):
     else:
         voice_recorder_instance = DummyVoiceRecorder()
 
-    # STSパイプラインを初期化
-    sts = STSPipeline(
+    # STSパイプラインの設定
+    sts_configurator = STSConfigurator()
+    sts = sts_configurator.create_pipeline(
         llm=llm,
-        tts=custom_tts,
-        stt=stt_instance,
-        vad=vad_instance,  # VADインスタンスを追加
+        stt_instance=stt_instance,
+        vad_instance=vad_instance,
         voice_recorder_enabled=voice_recorder_enabled,
-        voice_recorder=voice_recorder_instance,
+        voice_recorder_instance=voice_recorder_instance,
         wakewords=wakewords,
-        wakeword_timeout=60.0,  # ウェイクワードタイムアウト（秒）
-        performance_recorder=DummyPerformanceRecorder(),
-        debug=debug_mode,
+        debug_mode=debug_mode,
     )
-
-    # process_requestメソッドをオーバーライドして、音声入力時のcontext_id処理を追加
-    if hasattr(sts, "process_request"):
-        original_process_request = sts.process_request
-
-        async def custom_process_request(request):
-            """音声入力時に共有context_idを適用するカスタムメソッド"""
-            nonlocal shared_context_id
-
-            # 音声入力かつ共有context_idがある場合
-            if shared_context_id:
-                # SimpleNamespaceオブジェクトの場合
-                if hasattr(request, "__dict__"):
-                    if hasattr(request, "audio_data") and request.audio_data is not None:
-                        if not getattr(request, "context_id", None):
-                            request.context_id = shared_context_id
-                            logger.info(
-                                f"音声入力リクエストに共有context_idを設定: {shared_context_id}"
-                            )
-                # 辞書型の場合
-                elif isinstance(request, dict):
-                    if request.get("audio_data") is not None:
-                        if not request.get("context_id"):
-                            request["context_id"] = shared_context_id
-                            logger.info(
-                                f"音声入力リクエスト(dict)に共有context_idを設定: "
-                                f"{shared_context_id}"
-                            )
-
-            # 元のメソッドを呼び出し
-            return await original_process_request(request)
-
-        # メソッドを置き換え
-        sts.process_request = custom_process_request
-    else:
-        logger.warning("STSPipelineにprocess_requestメソッドが見つかりません")
-
-    # is_awakeメソッドをオーバーライドして、テキストチャットの場合は常にTrueを返す
-    original_is_awake = sts.is_awake
-
-    def custom_is_awake(request, last_request_at):
-        # 共有context_idがある場合は、既に会話が開始されているのでウェイクワード不要
-        if shared_context_id:
-            logger.debug(f"既存の会話コンテキストあり（{shared_context_id}）、ウェイクワード不要")
-            return True
-
-        # audio_dataの有無でテキストチャットか判定
-        # テキストチャットの場合はaudio_dataがNoneまたは存在しない
-        is_text_chat = False
-        if hasattr(request, "audio_data"):
-            if request.audio_data is None:
-                is_text_chat = True
-        else:
-            # audio_data属性自体がない場合もテキストチャット
-            is_text_chat = True
-
-        if is_text_chat:
-            logger.debug("テキストチャットのため、ウェイクワード検出済みとして処理")
-            return True
-
-        # それ以外（音声入力）は元の処理を実行
-        return original_is_awake(request, last_request_at)
-
-    sts.is_awake = custom_is_awake
 
     # フック処理クラスの初期化
     request_hook_processor = RequestHookProcessor(
@@ -313,32 +241,21 @@ def create_app(config_dir=None):
         nonlocal shared_context_id
         await request_hook_processor.process_before_llm(request, shared_context_id)
 
-    # ChatMemoryの設定
-    if memory_enabled:
-        logger.info(f"ChatMemoryを有効化します: {memory_url}")
-        memory_client = ChatMemoryClient(memory_url)
-
-        # メモリツールをセットアップ
-        memory_prompt_addition = setup_memory_tools(
-            sts, config, memory_client, session_manager, cocoro_dock_client
-        )
-
-        # システムプロンプトにメモリ機能の説明を追加（初回のみ）
-        if memory_prompt_addition and memory_prompt_addition not in llm.system_prompt:
-            llm.system_prompt = llm.system_prompt + memory_prompt_addition
-
-    # MCPツールをセットアップ（isEnableMcpがTrueの場合のみ）
-    if config.get("isEnableMcp", False):
-        logger.info("MCPツールを初期化します")
-        mcp_prompt_addition = setup_mcp_tools(sts, config, cocoro_dock_client)
-        if mcp_prompt_addition:
-            llm.system_prompt = llm.system_prompt + mcp_prompt_addition
-            logger.info("MCPツールの説明をシステムプロンプトに追加しました")
-    else:
-        logger.info("MCPツールは無効になっています")
+    # ツール設定の初期化
+    tools_configurator = ToolsConfigurator()
     
-    # MCPシステムのクリーンアップタスクを登録
-    shutdown_handler.register_cleanup_task(shutdown_mcp_system, "MCP System")
+    # ChatMemoryツールの設定
+    memory_prompt_addition = tools_configurator.setup_memory_tools(
+        sts, config, memory_client, session_manager, cocoro_dock_client, llm, memory_enabled
+    )
+    
+    # MCPツールの設定
+    mcp_prompt_addition = tools_configurator.setup_mcp_tools(
+        sts, config, cocoro_dock_client, llm
+    )
+    
+    # クリーンアップタスクの登録
+    tools_configurator.register_cleanup_tasks(shutdown_handler)
 
     # REST APIクライアントの初期化
     if enable_cocoro_shell:
@@ -367,71 +284,38 @@ def create_app(config_dir=None):
         debug=False,  # AIAvatarHttpServerのデバッグは常にFalse
     )
 
-    # STSパイプラインのinvokeメソッドをラップ
-    original_invoke = sts.invoke
-
-    async def wrapped_invoke(request):
-        nonlocal shared_context_id
-
-        # テキストリクエストで共有context_idがある場合
-        if shared_context_id and hasattr(request, "text") and request.text:
-            # context_idが未設定の場合は共有context_idを設定
-            if not getattr(request, "context_id", None):
-                request.context_id = shared_context_id
-                logger.info(f"STSリクエストに共有context_idを設定: {shared_context_id}")
-
-        # 元のinvokeを呼び出し
-        async for chunk in original_invoke(request):
-            yield chunk
-
-    # メソッドを置き換え
-    sts.invoke = wrapped_invoke
+    # STSパイプラインの追加設定
+    sts_configurator.setup_invoke_wrapper(sts)
+    sts_configurator.setup_text_request_override(sts)
+    
+    # 共有context_idの更新機能を設定
+    def update_shared_context_id():
+        sts_configurator.set_shared_context_id(sts, shared_context_id)
+    
+    # 初期設定
+    update_shared_context_id()
 
     # FastAPIアプリを設定し、AIAvatarのルーターを含める
     app = FastAPI()
     router = aiavatar_app.get_api_router()
     app.include_router(router)
 
-    # アプリケーション起動時イベント：VAD定期調整タスクを開始
-    @app.on_event("startup")
-    async def startup_event():
-        if (
-            vad_instance
-            and hasattr(vad_instance, "start_periodic_adjustment_task")
-            and vad_auto_adjustment
-        ):
-            asyncio.create_task(vad_instance.start_periodic_adjustment_task())
-            logger.info("🔄 VAD定期調整タスクを開始しました")
-        elif vad_instance and not vad_auto_adjustment:
-            logger.info("🔧 VAD自動調整無効のため、定期調整タスクはスキップしました")
-        
-        # MCP初期化が保留中の場合は実行
-        await initialize_mcp_if_pending()
-
-    # STSパイプラインの_process_text_requestメソッドをオーバーライド
-    if hasattr(sts, "_process_text_request"):
-        original_process_text_request = sts._process_text_request
-
-        async def custom_process_text_request(request):
-            """テキストリクエスト処理時に共有context_idを適用"""
-            nonlocal shared_context_id
-
-            # 共有context_idがあり、リクエストにcontext_idがない場合は設定
-            if shared_context_id and not getattr(request, "context_id", None):
-                if hasattr(request, "__dict__"):
-                    request.context_id = shared_context_id
-                    logger.info(f"テキストリクエストに共有context_idを設定: {shared_context_id}")
-                elif isinstance(request, dict) and not request.get("context_id"):
-                    request["context_id"] = shared_context_id
-                    logger.info(
-                        f"テキストリクエスト(dict)に共有context_idを設定: {shared_context_id}"
-                    )
-
-            # 元のメソッドを呼び出し
-            return await original_process_text_request(request)
-
-        sts._process_text_request = custom_process_text_request
-        logger.info("STSパイプラインの_process_text_requestメソッドをオーバーライドしました")
+    # イベントハンドラーの設定
+    event_handlers = AppEventHandlers(
+        memory_client=memory_client,
+        session_manager=session_manager,
+        deps_container=deps_container,
+        vad_instance=vad_instance,
+        vad_auto_adjustment=vad_auto_adjustment,
+        stt_api_key=stt_api_key,
+        user_id=user_id,
+        get_shared_context_id=get_shared_context_id,
+        cocoro_dock_client=cocoro_dock_client,
+    )
+    
+    # VAD用startup イベント
+    startup_vad_handler = event_handlers.create_vad_startup_handler()
+    app.on_event("startup")(startup_vad_handler)
 
     # マイク入力タスクの管理
     mic_input_task = None
@@ -468,93 +352,15 @@ def create_app(config_dir=None):
     }
     setup_endpoints(app, deps)
 
-    # アプリケーション終了時のクリーンアップ
-    @app.on_event("startup")
-    async def startup():
-        """アプリケーション起動時の処理"""
-        if memory_client:
-            nonlocal timeout_check_task
-            nonlocal shared_context_id
-
-            # SessionManagerとChatMemoryClientでタイムアウトチェッカーを開始
-            async def timeout_checker_with_context_clear():
-                """タイムアウトチェッカーにcontext_idクリア機能を追加"""
-                nonlocal shared_context_id
-                checker = create_timeout_checker(session_manager, memory_client)
-                while True:
-                    await checker
-                    # セッションタイムアウト時に共有context_idもクリア
-                    active_sessions = await session_manager.get_all_sessions()
-                    if not active_sessions and shared_context_id:
-                        logger.info(
-                            f"全セッションタイムアウトにより共有context_idをクリア: {shared_context_id}"
-                        )
-                        shared_context_id = None
-
-            timeout_check_task = asyncio.create_task(timeout_checker_with_context_clear())
-            logger.info("セッションタイムアウトチェックタスクを開始しました")
-
-        # マイク入力の開始（STTが有効かつインスタンスが作成されている場合）
-        if deps_container.is_use_stt and stt_api_key and vad_instance:
-            deps_container.mic_input_task = asyncio.create_task(
-                process_mic_input(vad_instance, user_id, get_shared_context_id, cocoro_dock_client)
-            )
-            logger.info("起動時にSTTが有効のため、マイク入力を開始しました")
-        elif stt_api_key and vad_instance:
-            logger.info("STTインスタンスは準備済み、APIコマンドで有効化可能です")
-
-    @app.on_event("shutdown")
-    async def cleanup():
-        """アプリケーション終了時の処理"""
-        # タイムアウトチェックタスクをキャンセル
-        if timeout_check_task:
-            timeout_check_task.cancel()
-            try:
-                await timeout_check_task
-            except asyncio.CancelledError:
-                pass
-
-        # ChatMemoryのクリーンアップ
-        if memory_client:
-            # すべてのアクティブなセッションの要約を生成
-            all_sessions = await session_manager.get_all_sessions()
-            for session_key, _ in all_sessions.items():
-                try:
-                    user_id, session_id = session_key.split(":", 1)
-                    logger.info(f"シャットダウン時の要約生成: {session_key}")
-                    await memory_client.create_summary(user_id, session_id)
-                except Exception as e:
-                    logger.error(f"シャットダウン時の要約生成エラー: {e}")
-
-            await memory_client.close()
-
-        # 残っているLLMステータス送信タスクをすべてキャンセル
-        for request_id, task in list(llm_status_manager.active_requests.items()):
-            llm_status_manager.stop_periodic_status(request_id)
-        logger.info("すべてのLLMステータス送信タスクを停止しました")
-
-        # REST APIクライアントのクリーンアップ
-        if cocoro_dock_client:
-            logger.info("CocoroDockクライアントを終了します")
-            await cocoro_dock_client.close()
-
-        if cocoro_shell_client:
-            logger.info("CocoroShellクライアントを終了します")
-            await cocoro_shell_client.close()
-
-        # STT（音声認識）のクリーンアップ
-        if stt_instance:
-            logger.info("音声認識クライアントを終了します")
-            await stt_instance.close()
-
-        # マイク入力タスクのキャンセル
-        if deps_container.mic_input_task:
-            logger.info("マイク入力タスクを停止します")
-            deps_container.mic_input_task.cancel()
-            try:
-                await deps_container.mic_input_task
-            except asyncio.CancelledError:
-                pass
+    # メイン startup ハンドラー
+    startup_handler = event_handlers.create_startup_handler()
+    app.on_event("startup")(startup_handler)
+    
+    # shutdown ハンドラー
+    shutdown_handler_func = event_handlers.create_shutdown_handler(
+        llm_status_manager, cocoro_dock_client, cocoro_shell_client, stt_instance
+    )
+    app.on_event("shutdown")(shutdown_handler_func)
 
     return app, port
 
