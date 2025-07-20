@@ -36,6 +36,7 @@ from config_loader import load_config
 from config_validator import validate_config
 from dummy_db import DummyPerformanceRecorder, DummyVoiceRecorder
 from endpoints import setup_endpoints
+from hook_processor import RequestHookProcessor
 from image_processor import parse_image_response, generate_image_description
 from llm_manager import LLMStatusManager, create_llm_service
 from mcp_tools import (
@@ -51,6 +52,7 @@ from shutdown_handler import shutdown_handler
 from stt_manager import create_stt_service
 from time_utils import generate_current_time_info, create_time_guidelines
 from prompt_utils import add_system_prompts
+from response_processor import ResponseProcessor
 from voice_processor import process_mic_input
 from vad_manager import SmartVoiceDetector, VADEventHandler
 
@@ -283,223 +285,33 @@ def create_app(config_dir=None):
 
     sts.is_awake = custom_is_awake
 
+    # フック処理クラスの初期化
+    request_hook_processor = RequestHookProcessor(
+        config=config,
+        llm=llm,
+        user_id=user_id,
+        llm_status_manager=llm_status_manager,
+        cocoro_dock_client=cocoro_dock_client,
+        cocoro_shell_client=cocoro_shell_client,
+        wakewords=wakewords,
+    )
+
+    response_processor = ResponseProcessor(
+        user_id=user_id,
+        llm_status_manager=llm_status_manager,
+        session_manager=session_manager,
+        memory_client=memory_client,
+        cocoro_dock_client=cocoro_dock_client,
+        cocoro_shell_client=cocoro_shell_client,
+        current_char=current_char,
+        vad_instance=vad_instance,
+    )
+
     # on_before_llmフック（音声認識の有無に関わらず統一）
     @sts.on_before_llm
     async def handle_before_llm(request):
         nonlocal shared_context_id
-
-        # 現在時刻情報を動的に更新
-        current_time_info = generate_current_time_info()
-
-        # システムプロンプトに現在時刻を動的に追加
-        # 前回の時刻情報があれば削除してから新しい情報を追加
-        original_prompt = llm.system_prompt
-        time_marker = "現在の日時:"
-
-        # 既存の時刻情報を削除
-        if time_marker in original_prompt:
-            lines = original_prompt.split("\n")
-            filtered_lines = [line for line in lines if not line.strip().startswith(time_marker)]
-            llm.system_prompt = "\n".join(filtered_lines)
-
-        # 新しい時刻情報を追加
-        llm.system_prompt = llm.system_prompt + f"\n\n{current_time_info}\n"
-
-        logger.debug(f"時刻情報を更新: {current_time_info}")
-
-        # user_idを設定ファイルから読み込んだ値に上書き
-        if hasattr(request, 'user_id') and user_id:
-            original_user_id = request.user_id
-            request.user_id = user_id
-            logger.info(f"user_idを設定値に変更: {original_user_id} → {user_id}")
-
-        # 音声入力でcontext_idが未設定の場合、共有context_idを設定
-        if shared_context_id:
-            # テキストチャットか音声入力かを判定
-            is_voice_input = hasattr(request, "audio_data") and request.audio_data is not None
-
-            if is_voice_input and not getattr(request, "context_id", None):
-                # requestオブジェクトが読み取り専用の場合があるため、
-                # 新しい属性として設定を試みる
-                try:
-                    request.context_id = shared_context_id
-                    logger.info(f"音声入力に共有context_idを設定: {shared_context_id}")
-                except AttributeError:
-                    # 読み取り専用の場合は、別の方法で設定
-                    logger.warning(
-                        f"requestオブジェクトは読み取り専用です。context_id: "
-                        f"{shared_context_id}を別の方法で設定します"
-                    )
-                    # STSパイプラインにcontext_idを直接設定する試み
-                    if hasattr(sts, "context_id"):
-                        sts.context_id = shared_context_id
-                        logger.info(f"STSパイプラインにcontext_idを直接設定: {shared_context_id}")
-
-        # リクエストの詳細情報をログ出力
-        logger.debug(f"[on_before_llm] request.text: '{request.text}'")
-        logger.debug(f"[on_before_llm] request.session_id: {request.session_id}")
-        logger.debug(f"[on_before_llm] request.user_id: {request.user_id}")
-        logger.debug(
-            f"[on_before_llm] request.context_id: {getattr(request, 'context_id', 'なし')}"
-        )
-        logger.debug(f"[on_before_llm] request.metadata: {getattr(request, 'metadata', {})}")
-        logger.debug(
-            f"[on_before_llm] has audio_data: {hasattr(request, 'audio_data')} "
-            f"(is None: {getattr(request, 'audio_data', None) is None})"
-        )
-
-        # リクエストオブジェクトの全属性をデバッグ出力
-        logger.debug(f"[on_before_llm] request type: {type(request)}")
-        logger.debug(
-            f"[on_before_llm] request dir: "
-            f"{[attr for attr in dir(request) if not attr.startswith('_')]}"
-        )
-        if hasattr(request, "__dict__"):
-            # audio_dataを除外して表示
-            filtered_dict = {k: v for k, v in request.__dict__.items() if k != "audio_data"}
-            logger.debug(f"[on_before_llm] request.__dict__: {filtered_dict}")
-            if "audio_data" in request.__dict__:
-                logger.debug(
-                    f"[on_before_llm] audio_data: <{len(request.audio_data) if request.audio_data else 0} bytes>"
-                )
-
-        # 音声認識結果のCocoroDockへの送信とログ出力
-        if request.text:
-            # テキストチャットか音声認識かを判定
-            # audio_dataの有無で判定（音声認識の場合はaudio_dataがある）
-            is_text_chat = False
-            if hasattr(request, "audio_data"):
-                # audio_dataがNoneまたは存在しない場合はテキストチャット
-                if request.audio_data is None:
-                    is_text_chat = True
-            else:
-                # audio_data属性自体がない場合もテキストチャット
-                is_text_chat = True
-
-            if is_text_chat:
-                logger.info(
-                    f"💬 テキストチャット受信: '{request.text}' "
-                    f"(session_id: {request.session_id}, user_id: {request.user_id})"
-                )
-            else:
-                # 音声認識の場合
-                logger.info(
-                    f"🎤 音声認識結果: '{request.text}' "
-                    f"(session_id: {request.session_id}, user_id: {request.user_id})"
-                )
-                # 音声認識したテキストをCocoroDockに送信（非同期）
-                if cocoro_dock_client:
-                    asyncio.create_task(
-                        cocoro_dock_client.send_chat_message(role="user", content=request.text)
-                    )
-                    logger.debug(f"音声認識テキストをCocoroDockに送信: '{request.text}'")
-            
-            # メッセージ受信時に正面を向く処理
-            if cocoro_shell_client:
-                asyncio.create_task(
-                    cocoro_shell_client.send_control_command(command="lookForward")
-                )
-                logger.debug("正面を向くコマンドをCocoroShellに送信")
-
-            if wakewords:
-                for wakeword in wakewords:
-                    if wakeword.lower() in request.text.lower():
-                        # ウェイクワード検出ステータス送信（非同期）
-                        if cocoro_dock_client:
-                            asyncio.create_task(
-                                cocoro_dock_client.send_status_update(
-                                    "ウェイクワード検出", status_type="voice_detected"
-                                )
-                            )
-                        logger.info(f"✨ ウェイクワード検出: '{wakeword}' in '{request.text}'")
-
-        # 通知タグの処理（変換は行わず、ログを出力し、metadataに保存）
-        if request.text and "<cocoro-notification>" in request.text:
-            notification_pattern = r"<cocoro-notification>\s*({.*?})\s*</cocoro-notification>"
-            notification_match = re.search(notification_pattern, request.text, re.DOTALL)
-
-            if notification_match:
-                try:
-                    notification_json = notification_match.group(1)
-                    notification_data = json.loads(notification_json)
-                    app_name = notification_data.get("from", "不明なアプリ")
-                    logger.info(f"通知を検出: from={app_name}")
-                    
-                    # metadataに通知情報を追加
-                    if not hasattr(request, 'metadata') or request.metadata is None:
-                        request.metadata = {}
-                    request.metadata['notification_from'] = app_name
-                    request.metadata['is_notification'] = True
-                    request.metadata['notification_message'] = notification_data.get("message", "")
-                    logger.info(f"通知情報をmetadataに保存: {request.metadata}")
-                except Exception as e:
-                    logger.error(f"通知の解析エラー: {e}")
-
-        # デスクトップモニタリング画像タグの処理
-        if request.text and "<cocoro-desktop-monitoring>" in request.text:
-            logger.info("デスクトップモニタリング画像タグを検出（独り言モード）")
-
-        # 画像がある場合は応答を生成してパース
-        if request.files and len(request.files) > 0:
-            try:
-                # 画像URLのリストを作成
-                image_urls = [file["url"] for file in request.files]
-                
-                # 画像の客観的な説明を生成
-                image_response = await generate_image_description(image_urls, config)
-                
-                if image_response:
-                    # 応答をパースして説明と分類を抽出
-                    parsed_data = parse_image_response(image_response)
-                    
-                    # メタデータに情報を保存
-                    if not hasattr(request, 'metadata') or request.metadata is None:
-                        request.metadata = {}
-                    request.metadata['image_description'] = parsed_data.get('description', '')
-                    request.metadata['image_category'] = parsed_data.get('category', '')
-                    request.metadata['image_mood'] = parsed_data.get('mood', '')
-                    request.metadata['image_time'] = parsed_data.get('time', '')
-                    request.metadata['image_count'] = len(image_urls)
-                    
-                    # ユーザーのメッセージに画像情報を追加
-                    original_text = request.text or ""
-                    description = parsed_data.get('description', '画像が共有されました')
-                    
-                    # 通知の画像かどうかを判断
-                    is_notification = request.metadata and request.metadata.get('is_notification', False)
-                    if is_notification:
-                        notification_from = request.metadata.get('notification_from', '不明なアプリ')
-                        if len(image_urls) == 1:
-                            image_prefix = f"[{notification_from}から画像付き通知: {description}]"
-                        else:
-                            image_prefix = f"[{notification_from}から{len(image_urls)}枚の画像付き通知: {description}]"
-                    else:
-                        if len(image_urls) == 1:
-                            image_prefix = f"[画像: {description}]"
-                        else:
-                            image_prefix = f"[{len(image_urls)}枚の画像: {description}]"
-                    
-                    if original_text:
-                        request.text = f"{image_prefix}\n{original_text}"
-                    else:
-                        request.text = image_prefix
-                    
-                    logger.info(f"画像情報をリクエストに追加: カテゴリ={parsed_data.get('category')}, 雰囲気={parsed_data.get('mood')}, 通知={is_notification}, 画像数={len(image_urls)}")
-            except Exception as e:
-                logger.error(f"画像処理に失敗しました: {e}")
-
-        # LLM送信開始のステータス通知と定期ステータス送信の開始
-        if cocoro_dock_client and request.text:
-            # 初回のステータス通知
-            asyncio.create_task(
-                cocoro_dock_client.send_status_update("LLM API呼び出し", status_type="llm_sending")
-            )
-
-            # 定期ステータス送信を開始
-            request_id = (
-                f"{request.session_id}_{request.user_id}_{request.context_id or 'no_context'}"
-            )
-            await llm_status_manager.start_periodic_status(request_id)
+        await request_hook_processor.process_before_llm(request, shared_context_id)
 
     # ChatMemoryの設定
     if memory_enabled:
@@ -538,86 +350,12 @@ def create_app(config_dir=None):
     async def on_response_complete(request, response):
         """AI応答完了時の処理"""
         nonlocal shared_context_id
-
-        # 定期ステータス送信を停止
-        request_id = f"{request.session_id}_{request.user_id}_{request.context_id or 'no_context'}"
-        llm_status_manager.stop_periodic_status(request_id)
-
-        # context_idを保存（音声・テキスト共通で使用）
-        if response.context_id:
-            shared_context_id = response.context_id
-            logger.debug(f"共有context_idを更新: {shared_context_id}")
-
-            # VADの全セッションに共有context_idを設定
-            if vad_instance and hasattr(vad_instance, "sessions"):
-                for session_id in list(vad_instance.sessions.keys()):
-                    vad_instance.set_session_data(session_id, "context_id", shared_context_id)
-                    logger.debug(
-                        f"VADセッション {session_id} にcontext_idを設定: {shared_context_id}"
-                    )
-
-        # セッションアクティビティを更新（これは待つ必要がある）
-        await session_manager.update_activity(request.user_id or user_id, request.session_id)
-
-        # 以下の処理をすべて非同期タスクとして起動（待たない）
-        async def send_to_external_services():
-            """外部サービスへの送信を非同期で実行"""
-            try:
-                # ChatMemory処理（メモリー機能が有効な場合）
-                if memory_client:
-                    await memory_client.enqueue_messages(request, response)
-                    # save_historyも非同期で実行
-                    asyncio.create_task(
-                        memory_client.save_history(
-                            user_id=request.user_id or user_id,
-                            session_id=request.session_id,
-                            channel="cocoro_ai",
-                        )
-                    )
-
-                # 並列実行するタスクのリスト
-                tasks = []
-
-                # CocoroDock への送信（AI応答のみ）
-                if cocoro_dock_client and response.text:
-                    tasks.append(
-                        cocoro_dock_client.send_chat_message(
-                            role="assistant", content=response.text
-                        )
-                    )
-
-                # CocoroShell への送信
-                if cocoro_shell_client and response.text:
-                    # 音声パラメータを取得
-                    voice_params = {
-                        "speaker_id": current_char.get("voiceSpeakerId", 1),
-                        "speed": current_char.get("voiceSpeed", 1.0),
-                        "pitch": current_char.get("voicePitch", 0.0),
-                        "volume": current_char.get("voiceVolume", 1.0),
-                    }
-
-                    # キャラクター名を取得（複数キャラクター対応）
-                    character_name = current_char.get("name", None)
-
-                    tasks.append(
-                        cocoro_shell_client.send_chat_for_speech(
-                            content=response.text,
-                            voice_params=voice_params,
-                            character_name=character_name,
-                        )
-                    )
-
-                # すべてのタスクを並列実行（結果は待たない）
-                if tasks:
-                    results = await asyncio.gather(*tasks, return_exceptions=True)
-                    for i, result in enumerate(results):
-                        if isinstance(result, Exception):
-                            logger.debug(f"外部サービス送信エラー（正常動作）: {result}")
-            except Exception as e:
-                logger.error(f"外部サービス送信中の予期しないエラー: {e}")
-
-        # 外部サービスへの送信を非同期で開始（待たずに即座にリターン）
-        asyncio.create_task(send_to_external_services())
+        
+        def set_shared_context_id(context_id):
+            nonlocal shared_context_id
+            shared_context_id = context_id
+        
+        await response_processor.process_response_complete(request, response, set_shared_context_id)
         
 
     # システムプロンプトにガイドラインを追加
