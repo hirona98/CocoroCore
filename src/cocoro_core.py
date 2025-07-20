@@ -17,9 +17,25 @@ from fastapi import Depends, FastAPI
 
 # local imports
 from api_clients import CocoroDockClient, CocoroShellClient
+from app_initializer import (
+    initialize_config,
+    initialize_dock_log_handler,
+    setup_debug_mode,
+    get_character_config,
+    extract_llm_config,
+    extract_port_config,
+    extract_stt_config,
+)
+from client_initializer import (
+    initialize_memory_client,
+    initialize_api_clients,
+    initialize_llm_manager,
+    initialize_session_manager,
+)
 from config_loader import load_config
 from config_validator import validate_config
 from dummy_db import DummyPerformanceRecorder, DummyVoiceRecorder
+from endpoints import setup_endpoints
 from image_processor import parse_image_response, generate_image_description
 from llm_manager import LLMStatusManager, create_llm_service
 from mcp_tools import (
@@ -75,122 +91,44 @@ def create_app(config_dir=None):
     Returns:
         tuple: (FastAPI アプリケーション, ポート番号)
     """
-    # 設定ファイルを読み込む
-    config = load_config(config_dir)
-
-    # 設定の検証
-    config_warnings = validate_config(config)
-    for warning in config_warnings:
-        logger.warning(f"設定警告: {warning}")
-
-    # CocoroDock用ログハンドラーの初期化（設定読み込み後に実行）
+    # 設定の初期化
+    config = initialize_config(config_dir)
+    
+    # CocoroDock用ログハンドラーの初期化
     global dock_log_handler
-    try:
-        from log_handler import CocoroDockLogHandler
-
-        # 設定からCocoroDockのポート番号を取得
-        dock_port = config.get("cocoroDockPort", 55600)
-        dock_url = f"http://127.0.0.1:{dock_port}"
-        dock_log_handler = CocoroDockLogHandler(dock_url=dock_url, component_name="CocoroCore")
-        dock_log_handler.setFormatter(logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s"))
-        dock_log_handler.setLevel(logging.DEBUG)  # すべてのレベルのログを受け取る
-        
-        # ルートロガーに追加して、すべてのライブラリのログを取得
-        root_logger = logging.getLogger()
-        root_logger.addHandler(dock_log_handler)
-        
-        # 初期状態は無効
-        dock_log_handler.set_enabled(False)
-        
-        # 特定のライブラリのログレベルを調整
-        # httpxのログを表示したい場合
-        logging.getLogger("httpx").setLevel(logging.INFO)
-        
-        # httpxの /api/logs リクエストを非表示にするためのフィルター
-        class ApiLogsFilter(logging.Filter):
-            def filter(self, record):
-                return not ("/api/logs" in record.getMessage())
-        
-        # httpxロガーにフィルターを追加
-        logging.getLogger("httpx").addFilter(ApiLogsFilter())
-        
-        logger.info("CocoroDockログハンドラーを初期化しました")
-        
-    except ImportError as e:
-        # CocoroDockログハンドラーのインポートに失敗
-        logger.warning(f"CocoroDockログハンドラーのインポートに失敗: {e}")
-        dock_log_handler = None
-    except Exception as e:
-        # CocoroDockログハンドラーの初期化に失敗
-        logger.warning(f"CocoroDockログハンドラーの初期化に失敗: {e}")
-        dock_log_handler = None
-
-    # デバッグモード設定
-    debug_mode = config.get("debug", False)
-    if debug_mode:
-        logger.setLevel(logging.DEBUG)
-        # logging.getLogger("aiavatar").setLevel(logging.DEBUG)
-
-    # 現在のキャラクター設定を取得
+    dock_log_handler = initialize_dock_log_handler(config)
+    
+    # デバッグモードの設定
+    debug_mode = setup_debug_mode(config)
+    
+    # キャラクター設定の取得
     character_list = config.get("characterList", [])
     current_index = config.get("currentCharacterIndex", 0)
-    if not character_list or current_index >= len(character_list):
-        raise ValueError("有効なキャラクター設定が見つかりません")
-
-    current_char = character_list[current_index]
-
-    # LLM設定を取得（環境変数を優先）
-    env_api_key = os.environ.get(f"LLM_API_KEY_{current_index}") or os.environ.get("LLM_API_KEY")
-    llm_api_key = env_api_key or current_char.get("apiKey")
-    llm_model = current_char.get("llmModel")
-    system_prompt = current_char.get("systemPrompt", "あなたは親切なアシスタントです。")
+    current_char = get_character_config(config)
     
-    # 時間感覚ガイドラインをシステムプロンプトに追加
-    system_prompt += create_time_guidelines()
+    # LLM設定の抽出
+    llm_api_key, llm_model, system_prompt, user_id = extract_llm_config(config, current_char, current_index)
     
-    # ユーザーID設定を取得
-    user_id = current_char.get("userId", "default_user")
-    logger.info(f"設定から読み込んだユーザーID: {user_id}")
-
-    # ポート設定
-    port = config.get("cocoroCorePort", 55601)
-
-    # ChatMemory設定
-    memory_enabled = current_char.get("isEnableMemory", False)
-    memory_port = config.get("cocoroMemoryPort", 55602)
-    memory_url = f"http://127.0.0.1:{memory_port}"
-    memory_client = None
-    memory_prompt_addition = ""
-
-    # REST APIクライアント設定
-    cocoro_dock_port = config.get("cocoroDockPort", 55600)
-    cocoro_shell_port = config.get("cocoroShellPort", 55605)
-    enable_cocoro_dock = config.get("enableCocoroDock", True)
-    enable_cocoro_shell = config.get("enableCocoroShell", True)
-
-    cocoro_dock_client = None
-    cocoro_shell_client = None
-
-    # REST APIクライアントの早期初期化（ステータス通知用）
-    if enable_cocoro_dock:
-        from api_clients import CocoroDockClient
-
-        cocoro_dock_client = CocoroDockClient(f"http://127.0.0.1:{cocoro_dock_port}")
-        logger.info(f"CocoroDockクライアントを初期化しました: ポート {cocoro_dock_port}")
-
-    # セッション管理
-    session_manager = SessionManager(timeout_seconds=300, max_sessions=1000)
-    timeout_check_task = None
-
+    # ポート設定の取得
+    port = extract_port_config(config)
+    
+    # STT設定の抽出
+    (is_use_stt, stt_engine, stt_wake_word, stt_api_key, stt_language,
+     vad_auto_adjustment, vad_threshold) = extract_stt_config(current_char, config)
+    
+    # クライアント初期化
+    memory_client, memory_enabled, memory_prompt_addition = initialize_memory_client(current_char, config)
+    cocoro_dock_client, cocoro_shell_client = initialize_api_clients(config)
+    session_manager = initialize_session_manager()
+    llm_status_manager = initialize_llm_manager(cocoro_dock_client)
+    
     # 音声とテキストで共有するcontext_id
     shared_context_id = None
+    timeout_check_task = None
 
     # shared_context_idのプロバイダー関数を定義
     def get_shared_context_id():
         return shared_context_id
-
-    # LLMステータスマネージャーの初期化
-    llm_status_manager = LLMStatusManager(cocoro_dock_client)
 
     # LLMサービスを初期化
     llm = create_llm_service(
@@ -203,18 +141,6 @@ def create_app(config_dir=None):
 
     # 音声合成はCocoroShell側で行うためダミーを使用
     custom_tts = SpeechSynthesizerDummy()
-
-    # STT（音声認識）設定
-    is_use_stt = current_char.get("isUseSTT", False)
-    stt_engine = current_char.get("sttEngine", "amivoice").lower()  # デフォルトはAmiVoice
-    stt_wake_word = current_char.get("sttWakeWord", "")
-    stt_api_key = current_char.get("sttApiKey", "")
-    stt_language = current_char.get("sttLanguage", "ja")  # OpenAI用の言語設定
-
-    # VAD（音声活動検出）設定
-    microphone_settings = config.get("microphoneSettings", {})
-    vad_auto_adjustment = microphone_settings.get("autoAdjustment", True)  # デフォルトは自動調整ON
-    vad_threshold = microphone_settings.get("inputThreshold", -45.0)  # デフォルト閾値は-45dB
 
     # STTインスタンスの初期化（APIキーがあれば常に作成）
     stt_instance = None
@@ -769,220 +695,6 @@ def create_app(config_dir=None):
         sts._process_text_request = custom_process_text_request
         logger.info("STSパイプラインの_process_text_requestメソッドをオーバーライドしました")
 
-    # ヘルスチェックエンドポイント（管理用）
-    @app.get("/health")
-    async def health_check():
-        """ヘルスチェック用エンドポイント"""
-        # MCP状態を取得（isEnableMcpがTrueの場合のみ）
-        mcp_status = None
-        if config.get("isEnableMcp", False):
-            mcp_status = await get_mcp_status()
-        
-        return {
-            "status": "healthy",
-            "version": "1.0.0",
-            "character": current_char.get("name", "unknown"),
-            "memory_enabled": memory_enabled,
-            "llm_model": llm_model,
-            "active_sessions": session_manager.get_active_session_count(),
-            "mcp_status": mcp_status,
-        }
-
-    # MCPツール登録ログ取得エンドポイント
-    @app.get("/api/mcp/tool-registration-log")
-    async def get_mcp_tool_registration_log():
-        """MCPツール登録ログを取得"""
-        # isEnableMcpがFalseの場合は空のログを返す
-        if not config.get("isEnableMcp", False):
-            return {
-                "status": "success",
-                "message": "MCPは無効になっています",
-                "logs": []
-            }
-        
-        try:
-            from mcp_tools import get_mcp_tool_registration_log
-            logs = get_mcp_tool_registration_log()
-            return {
-                "status": "success",
-                "message": f"{len(logs)}件のログを取得しました",
-                "logs": logs
-            }
-        except Exception as e:
-            logger.error(f"MCPツール登録ログ取得エラー: {e}")
-            return {
-                "status": "error",
-                "message": f"ログ取得に失敗しました: {e}",
-                "logs": []
-            }
-
-    # 制御コマンドエンドポイント
-    @app.post("/api/control")
-    async def control(request: dict):
-        """制御コマンドを実行"""
-        command = request.get("command")
-        params = request.get("params", {})
-        reason = request.get("reason")
-
-        if command == "shutdown":
-            # シャットダウン処理
-            grace_period = params.get("grace_period_seconds", 30)
-            logger.info(
-                f"制御コマンドによるシャットダウン要求: 理由={reason}, 猶予期間={grace_period}秒"
-            )
-            shutdown_handler.request_shutdown(grace_period)
-            return {
-                "status": "success",
-                "message": "Shutdown requested",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
-        elif command == "sttControl":
-            # STT（音声認識）制御
-            enabled = params.get("enabled", True)
-            logger.info(f"STT制御コマンド: enabled={enabled}")
-
-            # nonlocalで外部スコープの変数を参照
-            nonlocal is_use_stt, mic_input_task
-
-            # is_use_sttフラグを更新
-            is_use_stt = enabled
-
-            # マイク入力タスクの制御
-            if enabled:
-                # STTを有効化
-                if not mic_input_task or mic_input_task.done():
-                    # APIキーが設定されている場合のみ開始
-                    if stt_api_key and vad_instance:
-                        mic_input_task = asyncio.create_task(
-                            process_mic_input(vad_instance, user_id, get_shared_context_id, cocoro_dock_client)
-                        )
-                        return {
-                            "status": "success",
-                            "message": "STT enabled",
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                        }
-                    else:
-                        return {
-                            "status": "error",
-                            "message": "STT instances are not available (API key or VAD missing)",
-                            "timestamp": datetime.now(timezone.utc).isoformat(),
-                        }
-                else:
-                    return {
-                        "status": "success",
-                        "message": "STT is already enabled",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-            else:
-                # STTを無効化
-                if mic_input_task and not mic_input_task.done():
-                    logger.info("マイク入力タスクを停止します")
-                    mic_input_task.cancel()
-                    try:
-                        await mic_input_task
-                    except asyncio.CancelledError:
-                        pass
-                    return {
-                        "status": "success",
-                        "message": "STT disabled",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                else:
-                    return {
-                        "status": "success",
-                        "message": "STT is already disabled",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-        elif command == "microphoneControl":
-            # マイクロフォン設定制御
-            try:
-                auto_adjustment = params.get("autoAdjustment", True)
-                input_threshold = params.get("inputThreshold", -45.0)
-
-                logger.info(
-                    f"マイクロフォン制御コマンド: autoAdjustment={auto_adjustment}, inputThreshold={input_threshold:.1f}dB"
-                )
-
-                # VADインスタンスに設定を反映
-                if vad_instance and hasattr(vad_instance, "update_settings"):
-                    vad_instance.update_settings(auto_adjustment, input_threshold)
-                    return {
-                        "status": "success",
-                        "message": "Microphone settings updated",
-                        "autoAdjustment": auto_adjustment,
-                        "inputThreshold": input_threshold,
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                else:
-                    logger.warning("VADインスタンスが利用できません")
-                    return {
-                        "status": "error",
-                        "message": "VAD instance is not available",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-            except Exception as e:
-                logger.error(f"マイクロフォン設定更新エラー: {e}")
-                return {
-                    "status": "error",
-                    "message": f"Microphone settings update error: {str(e)}",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-        elif command == "start_log_forwarding":
-            # ログ転送開始
-            try:
-                if dock_log_handler is not None:
-                    dock_log_handler.set_enabled(True)
-                    logger.info("ログ転送を開始しました")
-                    return {
-                        "status": "success",
-                        "message": "Log forwarding started",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                else:
-                    logger.warning("ログハンドラーが利用できません")
-                    return {
-                        "status": "error",
-                        "message": "Log handler is not available",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-            except Exception as e:
-                logger.error(f"ログ転送開始エラー: {e}")
-                return {
-                    "status": "error",
-                    "message": f"Log forwarding start error: {str(e)}",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-        elif command == "stop_log_forwarding":
-            # ログ転送停止
-            try:
-                if dock_log_handler is not None:
-                    dock_log_handler.set_enabled(False)
-                    logger.info("ログ転送を停止しました")
-                    return {
-                        "status": "success",
-                        "message": "Log forwarding stopped",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-                else:
-                    return {
-                        "status": "success",
-                        "message": "Log forwarding was already stopped",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
-                    }
-            except Exception as e:
-                logger.error(f"ログ転送停止エラー: {e}")
-                return {
-                    "status": "error",
-                    "message": f"Log forwarding stop error: {str(e)}",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                }
-        else:
-            return {
-                "status": "error",
-                "message": f"Unknown command: {command}",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
-            }
-
     # マイク入力タスクの管理
     mic_input_task = None
 
@@ -990,12 +702,38 @@ def create_app(config_dir=None):
     def get_shared_context_id():
         return shared_context_id
 
+    # エンドポイント依存関係のコンテナ（可変参照用）
+    class DepsContainer:
+        def __init__(self):
+            self.mic_input_task = mic_input_task
+            self.is_use_stt = is_use_stt
+
+    deps_container = DepsContainer()
+
+    # エンドポイントの設定
+    deps = {
+        "config": config,
+        "current_char": current_char,
+        "memory_enabled": memory_enabled,
+        "llm_model": llm_model,
+        "session_manager": session_manager,
+        "dock_log_handler": dock_log_handler,
+        "is_use_stt": is_use_stt,
+        "stt_api_key": stt_api_key,
+        "vad_instance": vad_instance,
+        "user_id": user_id,
+        "get_shared_context_id": get_shared_context_id,
+        "cocoro_dock_client": cocoro_dock_client,
+        "mic_input_task": mic_input_task,
+        "shutdown_handler": shutdown_handler,
+        "deps_container": deps_container,
+    }
+    setup_endpoints(app, deps)
+
     # アプリケーション終了時のクリーンアップ
     @app.on_event("startup")
     async def startup():
         """アプリケーション起動時の処理"""
-        nonlocal mic_input_task
-
         if memory_client:
             nonlocal timeout_check_task
             nonlocal shared_context_id
@@ -1019,8 +757,8 @@ def create_app(config_dir=None):
             logger.info("セッションタイムアウトチェックタスクを開始しました")
 
         # マイク入力の開始（STTが有効かつインスタンスが作成されている場合）
-        if is_use_stt and stt_api_key and vad_instance:
-            mic_input_task = asyncio.create_task(
+        if deps_container.is_use_stt and stt_api_key and vad_instance:
+            deps_container.mic_input_task = asyncio.create_task(
                 process_mic_input(vad_instance, user_id, get_shared_context_id, cocoro_dock_client)
             )
             logger.info("起動時にSTTが有効のため、マイク入力を開始しました")
@@ -1072,11 +810,11 @@ def create_app(config_dir=None):
             await stt_instance.close()
 
         # マイク入力タスクのキャンセル
-        if mic_input_task:
+        if deps_container.mic_input_task:
             logger.info("マイク入力タスクを停止します")
-            mic_input_task.cancel()
+            deps_container.mic_input_task.cancel()
             try:
-                await mic_input_task
+                await deps_container.mic_input_task
             except asyncio.CancelledError:
                 pass
 
