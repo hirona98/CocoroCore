@@ -79,7 +79,7 @@ class CocoroDockLogHandler(logging.Handler):
             # 通常のリアルタイム送信
             self._schedule_send(log_message)
 
-        except Exception as e:
+        except Exception:
             # ログハンドラー内でエラーが発生してもメイン処理をブロックしない
             # エラーログは出力しない（無限ループを防ぐため）
             pass
@@ -96,7 +96,7 @@ class CocoroDockLogHandler(logging.Handler):
                 # イベントループが実行されていない場合は送信をスキップ
                 # run_until_complete や asyncio.run は使わない（ブロッキングを避ける）
                 pass
-        except Exception as e:
+        except Exception:
             # エラーログは出力しない（無限ループを防ぐため）
             pass
 
@@ -118,7 +118,7 @@ class CocoroDockLogHandler(logging.Handler):
         except httpx.TimeoutException:
             # タイムアウトの場合もサイレントに無視
             pass
-        except Exception as e:
+        except Exception:
             # その他のエラーもサイレントに処理
             # エラーログは出力しない（無限ループを防ぐため）
             pass
@@ -156,7 +156,7 @@ class CocoroDockLogHandler(logging.Handler):
             
             # 送信タスク作成後にバッファをクリア
             self._startup_buffer.clear()
-        except Exception as e:
+        except Exception:
             # エラーログは出力しない（無限ループを防ぐため）
             pass
 

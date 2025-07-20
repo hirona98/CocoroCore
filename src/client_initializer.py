@@ -42,14 +42,14 @@ def initialize_memory_client(current_char: Dict, config: Dict) -> Tuple[Optional
     return memory_client, memory_enabled, memory_prompt_addition
 
 
-def initialize_api_clients(config: Dict) -> Tuple[Optional[Any], Optional[Any]]:
+def initialize_api_clients(config: Dict) -> Tuple[Optional[Any], Optional[Any], bool, int]:
     """REST APIクライアントの初期化
     
     Args:
         config: 設定辞書
         
     Returns:
-        (cocoro_dock_client, cocoro_shell_client)
+        (cocoro_dock_client, cocoro_shell_client, enable_cocoro_shell, cocoro_shell_port)
     """
     cocoro_dock_port = config.get("cocoroDockPort", 55600)
     cocoro_shell_port = config.get("cocoroShellPort", 55605)
@@ -77,7 +77,7 @@ def initialize_api_clients(config: Dict) -> Tuple[Optional[Any], Optional[Any]]:
         except Exception as e:
             logger.error(f"CocoroShellクライアントの初期化に失敗: {e}")
 
-    return cocoro_dock_client, cocoro_shell_client
+    return cocoro_dock_client, cocoro_shell_client, enable_cocoro_shell, cocoro_shell_port
 
 
 def initialize_llm_manager(cocoro_dock_client: Optional[Any]) -> Any:

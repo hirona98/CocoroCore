@@ -25,13 +25,11 @@ def setup_endpoints(app: FastAPI, deps: Dict) -> None:
     llm_model = deps["llm_model"]
     session_manager = deps["session_manager"]
     dock_log_handler = deps["dock_log_handler"]
-    is_use_stt = deps["is_use_stt"]
     stt_api_key = deps["stt_api_key"]
     vad_instance = deps["vad_instance"]
     user_id = deps["user_id"]
     get_shared_context_id = deps["get_shared_context_id"]
     cocoro_dock_client = deps["cocoro_dock_client"]
-    mic_input_task = deps["mic_input_task"]
     shutdown_handler = deps["shutdown_handler"]
     deps_container = deps["deps_container"]
     

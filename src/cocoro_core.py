@@ -16,7 +16,6 @@ from aiavatar.sts.voice_recorder.file import FileVoiceRecorder
 from fastapi import Depends, FastAPI
 
 # local imports
-from api_clients import CocoroDockClient, CocoroShellClient
 from app_initializer import (
     initialize_config,
     initialize_dock_log_handler,
@@ -107,7 +106,6 @@ def create_app(config_dir=None):
     debug_mode = setup_debug_mode(config)
     
     # キャラクター設定の取得
-    character_list = config.get("characterList", [])
     current_index = config.get("currentCharacterIndex", 0)
     current_char = get_character_config(config)
     
@@ -123,13 +121,12 @@ def create_app(config_dir=None):
     
     # クライアント初期化
     memory_client, memory_enabled, memory_prompt_addition = initialize_memory_client(current_char, config)
-    cocoro_dock_client, cocoro_shell_client = initialize_api_clients(config)
+    cocoro_dock_client, cocoro_shell_client, enable_cocoro_shell, cocoro_shell_port = initialize_api_clients(config)
     session_manager = initialize_session_manager()
     llm_status_manager = initialize_llm_manager(cocoro_dock_client)
     
     # 音声とテキストで共有するcontext_id
     shared_context_id = None
-    timeout_check_task = None
 
     # shared_context_idのプロバイダー関数を定義
     def get_shared_context_id():
@@ -245,22 +242,18 @@ def create_app(config_dir=None):
     tools_configurator = ToolsConfigurator()
     
     # ChatMemoryツールの設定
-    memory_prompt_addition = tools_configurator.setup_memory_tools(
+    tools_configurator.setup_memory_tools(
         sts, config, memory_client, session_manager, cocoro_dock_client, llm, memory_enabled
     )
     
     # MCPツールの設定
-    mcp_prompt_addition = tools_configurator.setup_mcp_tools(
+    tools_configurator.setup_mcp_tools(
         sts, config, cocoro_dock_client, llm
     )
     
     # クリーンアップタスクの登録
     tools_configurator.register_cleanup_tasks(shutdown_handler)
 
-    # REST APIクライアントの初期化
-    if enable_cocoro_shell:
-        cocoro_shell_client = CocoroShellClient(f"http://127.0.0.1:{cocoro_shell_port}")
-        logger.info(f"CocoroShellクライアントを初期化しました: ポート {cocoro_shell_port}")
 
     # 応答送信処理
     @sts.on_finish
@@ -300,6 +293,17 @@ def create_app(config_dir=None):
     router = aiavatar_app.get_api_router()
     app.include_router(router)
 
+    # マイク入力タスクの管理
+    mic_input_task = None
+
+    # エンドポイント依存関係のコンテナ（可変参照用）
+    class DepsContainer:
+        def __init__(self):
+            self.mic_input_task = mic_input_task
+            self.is_use_stt = is_use_stt
+
+    deps_container = DepsContainer()
+
     # イベントハンドラーの設定
     event_handlers = AppEventHandlers(
         memory_client=memory_client,
@@ -316,21 +320,6 @@ def create_app(config_dir=None):
     # VAD用startup イベント
     startup_vad_handler = event_handlers.create_vad_startup_handler()
     app.on_event("startup")(startup_vad_handler)
-
-    # マイク入力タスクの管理
-    mic_input_task = None
-
-    # 共有context_idのプロバイダー関数
-    def get_shared_context_id():
-        return shared_context_id
-
-    # エンドポイント依存関係のコンテナ（可変参照用）
-    class DepsContainer:
-        def __init__(self):
-            self.mic_input_task = mic_input_task
-            self.is_use_stt = is_use_stt
-
-    deps_container = DepsContainer()
 
     # エンドポイントの設定
     deps = {
