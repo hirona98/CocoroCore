@@ -35,6 +35,7 @@ from shutdown_handler import shutdown_handler
 from stt_manager import create_stt_service
 from time_utils import generate_current_time_info, create_time_guidelines
 from prompt_utils import add_system_prompts
+from voice_processor import process_mic_input
 from vad_manager import SmartVoiceDetector, VADEventHandler
 
 # Ollama画像サポートパッチを適用
@@ -852,7 +853,9 @@ def create_app(config_dir=None):
                 if not mic_input_task or mic_input_task.done():
                     # APIキーが設定されている場合のみ開始
                     if stt_api_key and vad_instance:
-                        mic_input_task = asyncio.create_task(process_mic_input())
+                        mic_input_task = asyncio.create_task(
+                            process_mic_input(vad_instance, user_id, get_shared_context_id, cocoro_dock_client)
+                        )
                         return {
                             "status": "success",
                             "message": "STT enabled",
@@ -983,180 +986,9 @@ def create_app(config_dir=None):
     # マイク入力タスクの管理
     mic_input_task = None
 
-    # 共通のVADコンテキスト更新関数
-    def create_vad_context_updater(session_id: str):
-        """VADセッションのcontext_idを定期的に更新する関数を作成"""
-
-        async def update_vad_context():
-            """VADセッションのcontext_idを定期的に更新"""
-            nonlocal shared_context_id
-            last_context_id = shared_context_id
-
-            while True:
-                await asyncio.sleep(0.5)  # 0.5秒ごとにチェック
-                if shared_context_id and shared_context_id != last_context_id:
-                    # 共有context_idが更新されたらVADセッションも更新
-                    vad_instance.set_session_data(session_id, "context_id", shared_context_id)
-                    logger.info(
-                        f"VADセッション {session_id} のcontext_idを更新: {shared_context_id}"
-                    )
-                    last_context_id = shared_context_id
-
-        return update_vad_context
-
-    # 共通のマイク入力処理関数
-    async def process_mic_input():
-        """マイクからの音声入力を処理する共通関数"""
-        try:
-            logger.info("マイク入力を開始します")
-
-            # 音声入力待ち状態の通知
-            if cocoro_dock_client:
-                await cocoro_dock_client.send_status_update(
-                    "音声入力待ち", status_type="voice_waiting"
-                )
-
-            audio_device = AudioDevice()
-            logger.info(f"使用するマイクデバイス: {audio_device.input_device}")
-
-            audio_recorder = AudioRecorder(
-                sample_rate=16000,
-                device_index=audio_device.input_device,
-                channels=1,
-                chunk_size=512,
-            )
-            logger.info("AudioRecorderを初期化しました")
-
-            # デフォルトユーザーIDとセッションIDを設定（設定ファイルから読み込み）
-            default_user_id = user_id
-            # セッションIDの重複を防ぐためにマイクロ秒を追加
-            default_session_id = f"voice_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S_%f')}"
-
-            # VADにユーザーIDとコンテキストIDを設定
-            vad_instance.set_session_data(
-                default_session_id, "user_id", default_user_id, create_session=True
-            )
-            # 共有context_idがある場合は使用
-            if shared_context_id:
-                vad_instance.set_session_data(default_session_id, "context_id", shared_context_id)
-                logger.info(f"VADに共有context_idを設定: {shared_context_id}")
-
-            logger.info(
-                f"VADセッション設定完了: session_id={default_session_id}, "
-                f"user_id={default_user_id}, context_id={shared_context_id}"
-            )
-
-            # context_id更新タスクを開始
-            update_vad_context = create_vad_context_updater(default_session_id)
-            asyncio.create_task(update_vad_context())
-
-            # VADログ監視用のカスタムハンドラーを設定
-            # AIAvatarKitのVADロガーにハンドラーを追加
-            vad_logger = logging.getLogger("aiavatar.sts.vad.standard")
-            vad_event_handler = VADEventHandler(vad_instance)
-            vad_event_handler.setLevel(logging.INFO)
-            vad_logger.addHandler(vad_event_handler)
-
-            # 環境音キャリブレーションを開始
-            if hasattr(vad_instance, "start_environment_calibration"):
-                vad_instance.start_environment_calibration()
-
-            # キャリブレーション専用タスクを作成
-            async def calibration_task():
-                """5秒間のキャリブレーション専用タスク"""
-                if hasattr(vad_instance, "process_audio_sample"):
-                    for i in range(100):  # 5秒間で100サンプル（0.05秒間隔）
-                        await asyncio.sleep(0.05)
-                        vad_instance.process_audio_sample(None)  # キャリブレーション用の仮データ
-                        if (
-                            hasattr(vad_instance, "calibration_done")
-                            and vad_instance.calibration_done
-                        ):
-                            break
-                    logger.debug("キャリブレーションタスク終了")
-
-            # キャリブレーションタスクを開始
-            asyncio.create_task(calibration_task())
-
-            # 定期調整タスクを作成
-            async def periodic_adjustment_task():
-                """定期的にVADの調整を実行するタスク"""
-                await asyncio.sleep(5.1)  # キャリブレーション完了を待つ
-                logger.debug("⚙️ 定期調整タスク開始")
-
-                while True:
-                    try:
-                        await asyncio.sleep(10.0)  # 10秒間隔
-                        if (
-                            hasattr(vad_instance, "process_audio_sample")
-                            and hasattr(vad_instance, "calibration_done")
-                            and vad_instance.calibration_done
-                        ):
-                            logger.debug("🔄 定期調整タスクから音声サンプル処理を実行")
-                            vad_instance.process_audio_sample(None)  # 定期調整用のダミーデータ
-                    except Exception as e:
-                        logger.error(f"定期調整タスクエラー: {e}")
-
-            # 定期調整タスクを開始
-            asyncio.create_task(periodic_adjustment_task())
-
-            # マイクストリームを処理
-            logger.info("マイクストリームの処理を開始します")
-            stream_count = 0
-            recording_start_time = None
-            sample_count = 0
-
-            async for audio_chunk in await vad_instance.process_stream(
-                audio_recorder.start_stream(), session_id=default_session_id
-            ):
-                stream_count += 1
-
-                # 音声サンプルの処理（定期調整）- キャリブレーション完了後のみ
-                if (
-                    hasattr(vad_instance, "process_audio_sample")
-                    and hasattr(vad_instance, "calibration_done")
-                    and vad_instance.calibration_done
-                ):
-                    sample_count += 1
-                    if sample_count % 10 == 0:  # 10チャンクごとに音量測定
-                        logger.debug(
-                            f"🎵 音声サンプル処理実行: {sample_count}回目 (10チャンクごと)"
-                        )
-                        vad_instance.process_audio_sample(audio_chunk)
-                elif (
-                    hasattr(vad_instance, "calibration_done") and not vad_instance.calibration_done
-                ):
-                    logger.debug("⏳ キャリブレーション中のため音声サンプル処理をスキップ")
-
-                # 録音開始時刻を記録
-                if stream_count == 1:
-                    recording_start_time = asyncio.get_event_loop().time()
-
-                # 録音が成功したかチェック（音声チャンクが返ってきた時点で成功）
-                if audio_chunk and recording_start_time:
-                    duration = asyncio.get_event_loop().time() - recording_start_time
-                    if duration > 1.0:  # 1秒以上の録音は成功とみなす
-                        if hasattr(vad_instance, "handle_recording_event"):
-                            vad_instance.handle_recording_event("success")
-                    elif duration < 0.3:  # 0.3秒未満は短すぎる
-                        if hasattr(vad_instance, "handle_recording_event"):
-                            vad_instance.handle_recording_event("too_short")
-                    recording_start_time = None  # リセット
-
-                if stream_count % 100 == 0:  # 100チャンクごとにログ出力
-                    logger.debug(f"音声チャンクを処理中: {stream_count}チャンク目")
-
-                    # キャリブレーション状況をログ出力
-                    if (
-                        hasattr(vad_instance, "calibration_done")
-                        and not vad_instance.calibration_done
-                    ):
-                        if hasattr(vad_instance, "environment_samples"):
-                            sample_count_cal = len(vad_instance.environment_samples)
-                            logger.debug(f"環境音サンプル収集中: {sample_count_cal}個")
-
-        except Exception as e:
-            logger.error(f"マイク入力エラー: {e}", exc_info=True)
+    # 共有context_idのプロバイダー関数
+    def get_shared_context_id():
+        return shared_context_id
 
     # アプリケーション終了時のクリーンアップ
     @app.on_event("startup")
@@ -1188,7 +1020,9 @@ def create_app(config_dir=None):
 
         # マイク入力の開始（STTが有効かつインスタンスが作成されている場合）
         if is_use_stt and stt_api_key and vad_instance:
-            mic_input_task = asyncio.create_task(process_mic_input())
+            mic_input_task = asyncio.create_task(
+                process_mic_input(vad_instance, user_id, get_shared_context_id, cocoro_dock_client)
+            )
             logger.info("起動時にSTTが有効のため、マイク入力を開始しました")
         elif stt_api_key and vad_instance:
             logger.info("STTインスタンスは準備済み、APIコマンドで有効化可能です")
