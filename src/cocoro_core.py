@@ -63,7 +63,6 @@ dock_log_handler = None
 def parse_image_response(response_text: str) -> dict:
     """画像応答を解析してメタデータを抽出"""
     result = {
-        "reaction": "",
         "description": "",
         "category": "",
         "mood": "", 
@@ -73,9 +72,7 @@ def parse_image_response(response_text: str) -> dict:
     lines = response_text.split('\n')
     for line in lines:
         line = line.strip()
-        if line.startswith('反応:'):
-            result["reaction"] = line[3:].strip()
-        elif line.startswith('記憶:'):
+        if line.startswith('説明:'):
             result["description"] = line[3:].strip()
         elif line.startswith('分類:'):
             # メタデータを解析: [カテゴリ] / [雰囲気] / [時間帯]
@@ -91,8 +88,8 @@ def parse_image_response(response_text: str) -> dict:
     return result
 
 
-async def generate_image_description(image_urls: list[str], user_id: str) -> Optional[str]:
-    """画像の説明を生成（複数画像対応）"""
+async def generate_image_description(image_urls: list[str]) -> Optional[str]:
+    """画像の客観的な説明を生成（複数画像対応）"""
     try:
         import litellm
 
@@ -119,47 +116,43 @@ async def generate_image_description(image_urls: list[str], user_id: str) -> Opt
         # システムプロンプトを画像数に応じて調整
         if len(image_urls) == 1:
             system_prompt = (
-                "画像が送られた場合、以下の形式で応答してください：\n\n"
-                "反応: [キャラクターとしての自然な反応]\n"
-                "記憶: [この画像の詳細で客観的な説明]\n"
+                "画像を客観的に分析し、以下の形式で応答してください：\n\n"
+                "説明: [この画像の詳細で客観的な説明]\n"
                 "分類: [カテゴリ] / [雰囲気] / [時間帯]\n\n"
-                "記憶の説明は簡潔かつ的確に、以下を含めてください：\n"
+                "説明は簡潔かつ的確に、以下を含めてください：\n"
                 "- 画像の種類（写真/イラスト/スクリーンショット/図表など）\n"
                 "- 内容や被写体\n"
                 "- 色彩や特徴\n"
                 "- 文字情報があれば記載\n"
                 "例：\n"
-                "反応: わあ！素敵な遊園地のイラストですね！観覧車がとても大きくて楽しそうです。\n"
-                "記憶: 後楽園遊園地を描いたカラーイラスト。中央に白い観覧車と赤いゴンドラ、右側に青黄ストライプのメリーゴーラウンド。青空の下、来園者が散歩している平和な風景。\n"
+                "説明: 後楽園遊園地を描いたカラーイラスト。中央に白い観覧車と赤いゴンドラ、右側に青黄ストライプのメリーゴーラウンド。青空の下、来園者が散歩している平和な風景。\n"
                 "分類: 風景 / 楽しい / 昼\n\n"
                 "分類の選択肢：\n"
                 "- カテゴリ: 風景/人物/食事/建物/画面（プログラム）/画面（SNS）/画面（ゲーム）/画面（買い物）/画面（鑑賞）/[その他任意の分類]\n"
                 "- 雰囲気: 明るい/楽しい/悲しい/静か/賑やか/[その他任意の分類]\n"
                 "- 時間帯: 朝/昼/夕方/夜/不明"
             )
-            user_text = "この画像について教えてください。"
+            user_text = "この画像を客観的に説明してください。"
         else:
             system_prompt = (
-                f"複数の画像（{len(image_urls)}枚）が送られた場合、以下の形式で応答してください：\n\n"
-                "反応: [キャラクターとしての自然な反応]\n"
-                "記憶: [すべての画像の詳細で客観的な説明]\n"
+                f"複数の画像（{len(image_urls)}枚）を客観的に分析し、以下の形式で応答してください：\n\n"
+                "説明: [すべての画像の詳細で客観的な説明]\n"
                 "分類: [主要カテゴリ] / [全体的な雰囲気] / [時間帯]\n\n"
-                "記憶の説明は簡潔かつ的確に、以下を含めてください：\n"
+                "説明は簡潔かつ的確に、以下を含めてください：\n"
                 "- 各画像の種類（写真/イラスト/スクリーンショット/図表など）\n"
                 "- 内容や被写体\n"
                 "- 色彩や特徴\n"
                 "- 文字情報があれば記載\n"
                 "- 画像間の関連性があれば記載\n"
                 "例：\n"
-                "反応: わあ！素敵な写真を複数枚ありがとうございます！どれも楽しそうですね。\n"
-                "記憶: 1枚目：後楽園遊園地を描いたカラーイラスト。中央に白い観覧車と赤いゴンドラ。2枚目：同じ遊園地の夜景写真。ライトアップされた観覧車が美しい。関連性：同じ遊園地の昼と夜の風景。\n"
+                "説明: 1枚目：後楽園遊園地を描いたカラーイラスト。中央に白い観覧車と赤いゴンドラ。2枚目：同じ遊園地の夜景写真。ライトアップされた観覧車が美しい。関連性：同じ遊園地の昼と夜の風景。\n"
                 "分類: 風景 / 楽しい / 昼夜\n\n"
                 "分類の選択肢：\n"
                 "- カテゴリ: 風景/人物/食事/建物/画面（プログラム）/画面（SNS）/画面（ゲーム）/画面（買い物）/画面（鑑賞）/[その他任意の分類]\n"
                 "- 雰囲気: 明るい/楽しい/悲しい/静か/賑やか/[その他任意の分類]\n"
                 "- 時間帯: 朝/昼/夕方/夜/不明"
             )
-            user_text = f"これら{len(image_urls)}枚の画像について教えてください。"
+            user_text = f"これら{len(image_urls)}枚の画像を客観的に説明してください。"
         
         # メッセージコンテンツを構築
         user_content = []
@@ -208,6 +201,7 @@ def create_app(config_dir=None):
     global dock_log_handler
     try:
         from log_handler import CocoroDockLogHandler
+
         # 設定からCocoroDockのポート番号を取得
         dock_port = config.get("cocoroDockPort", 55600)
         dock_url = f"http://127.0.0.1:{dock_port}"
@@ -682,14 +676,11 @@ def create_app(config_dir=None):
                 # 画像URLのリストを作成
                 image_urls = [file["url"] for file in request.files]
                 
-                # 画像の応答（反応+記憶+分類）を生成
-                image_response = await generate_image_description(
-                    image_urls, 
-                    request.user_id or "default_user"
-                )
+                # 画像の客観的な説明を生成
+                image_response = await generate_image_description(image_urls)
                 
                 if image_response:
-                    # 応答をパースして各要素を抽出
+                    # 応答をパースして説明と分類を抽出
                     parsed_data = parse_image_response(image_response)
                     
                     # メタデータに情報を保存
@@ -715,9 +706,9 @@ def create_app(config_dir=None):
                             image_prefix = f"[{notification_from}から{len(image_urls)}枚の画像付き通知: {description}]"
                     else:
                         if len(image_urls) == 1:
-                            image_prefix = f"[画像を共有しました: {description}]"
+                            image_prefix = f"[画像: {description}]"
                         else:
-                            image_prefix = f"[{len(image_urls)}枚の画像を共有しました: {description}]"
+                            image_prefix = f"[{len(image_urls)}枚の画像: {description}]"
                     
                     if original_text:
                         request.text = f"{image_prefix}\n{original_text}"
