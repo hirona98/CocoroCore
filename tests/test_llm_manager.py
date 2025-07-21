@@ -1,10 +1,8 @@
 """llm_manager.py のユニットテスト"""
 import asyncio
+import sys
 import unittest
 from unittest.mock import MagicMock, AsyncMock, patch
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 # aiavatar依存関係をモック
 sys.modules['aiavatar'] = MagicMock()

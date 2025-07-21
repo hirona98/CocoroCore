@@ -1,9 +1,6 @@
 """memory_client.py のユニットテスト"""
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from memory_client import ChatMemoryClient
 

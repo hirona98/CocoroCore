@@ -203,3 +203,12 @@ class STSConfigurator:
             context_id: 共有context_id
         """
         sts._shared_context_id = context_id
+
+
+def create_sts_configurator() -> STSConfigurator:
+    """STSConfiguratorインスタンスを作成
+    
+    Returns:
+        STSConfiguratorインスタンス
+    """
+    return STSConfigurator()

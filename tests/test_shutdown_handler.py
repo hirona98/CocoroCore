@@ -2,9 +2,6 @@
 import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
-import sys
-import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from shutdown_handler import ShutdownHandler, shutdown_handler
 

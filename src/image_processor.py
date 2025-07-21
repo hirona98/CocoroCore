@@ -16,6 +16,9 @@ def parse_image_response(response_text: str) -> dict:
         "time": ""
     }
     
+    if response_text is None:
+        return result
+    
     lines = response_text.split('\n')
     for line in lines:
         line = line.strip()

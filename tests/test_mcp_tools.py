@@ -3,9 +3,7 @@
 
 import asyncio
 import json
-import os
 import tempfile
-import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch, mock_open
 
@@ -21,7 +19,6 @@ except ImportError:
     pytest = type('pytest', (), {'mark': type('mark', (), {'asyncio': pytest_mark_asyncio})})()
 
 # テスト対象のモジュールをインポート
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from mcp_tools import MCPServerManager, setup_mcp_tools, get_mcp_status
 
@@ -289,6 +286,78 @@ class TestMCPStatus:
         finally:
             # 元の状態に戻す
             mcp_tools.mcp_manager = original_manager
+
+
+class TestMCPToolsExtended:
+    """MCP Tools 拡張テストクラス"""
+    
+    def test_mcp_server_manager_init_with_various_configs(self):
+        """様々な設定でのMCPServerManager初期化テスト"""
+        from mcp_tools import MCPServerManager
+        
+        # 空の設定
+        manager1 = MCPServerManager({})
+        assert manager1.servers_config == {}
+        assert manager1.available_tools == {}
+        
+        # 複数サーバー設定
+        config = {
+            "server1": {"command": "test1", "args": [], "env": {}},
+            "server2": {"command": "test2", "args": ["arg1"], "env": {"VAR": "value"}}
+        }
+        manager2 = MCPServerManager(config)
+        assert len(manager2.servers_config) == 2
+        assert "server1" in manager2.servers_config
+        assert "server2" in manager2.servers_config
+    
+    @pytest.mark.asyncio
+    async def test_check_npx_package_variations(self):
+        """npxパッケージチェックの様々なパターンテスト"""
+        from mcp_tools import MCPServerManager
+        
+        manager = MCPServerManager({})
+        
+        # 空の引数
+        result1 = await manager._check_npx_package([], {})
+        assert result1 is False
+        
+        # None引数
+        result2 = await manager._check_npx_package(None, {})
+        assert result2 is False
+    
+    def test_get_server_info_with_tools(self):
+        """ツール情報を含むサーバー情報取得テスト"""
+        from mcp_tools import MCPServerManager
+        
+        config = {
+            "test-server": {"command": "test", "args": [], "env": {}}
+        }
+        manager = MCPServerManager(config)
+        
+        # ツールを追加
+        manager.available_tools = {
+            "tool1": {"name": "tool1", "description": "Test tool 1"},
+            "tool2": {"name": "tool2", "description": "Test tool 2"}
+        }
+        
+        info = manager.get_server_info()
+        assert info["total_servers"] == 1
+        assert info["total_tools"] == 2
+        assert len(info["tools"]) == 2
+    
+    def test_tool_registration_log(self):
+        """ツール登録ログのテスト"""
+        from mcp_tools import MCPServerManager
+        
+        manager = MCPServerManager({})
+        
+        # 初期状態
+        assert manager.tool_registration_log == []
+        
+        # ログ追加
+        manager.tool_registration_log.append("Test log entry")
+        assert len(manager.tool_registration_log) == 1
+        assert manager.tool_registration_log[0] == "Test log entry"
 
 
 class TestErrorHandling:

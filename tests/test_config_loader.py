@@ -1,11 +1,9 @@
 """config_loader.py のユニットテスト"""
 import json
-import os
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch, mock_open
-import sys
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from config_loader import load_config, parse_args
 
@@ -47,6 +45,7 @@ class TestConfigLoader(unittest.TestCase):
 
     def test_load_config_custom_dir(self):
         """カスタムディレクトリ指定でload_configをテスト"""
+        import os
         with tempfile.TemporaryDirectory() as tmpdir:
             # テスト用設定ファイルを作成
             config_file = os.path.join(tmpdir, "setting.json")
@@ -69,6 +68,7 @@ class TestConfigLoader(unittest.TestCase):
 
     def test_load_config_invalid_json(self):
         """無効なJSONファイルを指定した場合のテスト"""
+        import os
         with tempfile.TemporaryDirectory() as tmpdir:
             # 無効なJSONファイルを作成
             config_file = os.path.join(tmpdir, "setting.json")
@@ -124,6 +124,7 @@ class TestConfigLoader(unittest.TestCase):
 
     def test_load_config_empty_file(self):
         """空のファイルを指定した場合のテスト"""
+        import os
         with tempfile.TemporaryDirectory() as tmpdir:
             # 空のファイルを作成
             config_file = os.path.join(tmpdir, "setting.json")

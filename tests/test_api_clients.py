@@ -1,10 +1,7 @@
 """api_clients.py のユニットテスト"""
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
-import sys
-import os
 import httpx
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
 
 from api_clients import CocoroDockClient, CocoroShellClient
 
