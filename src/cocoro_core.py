@@ -110,7 +110,7 @@ def create_app(config_dir=None):
     current_char = get_character_config(config)
     
     # LLM設定の抽出
-    llm_api_key, llm_model, system_prompt, user_id = extract_llm_config(config, current_char, current_index)
+    llm_api_key, llm_model, system_prompt, base_url, user_id = extract_llm_config(config, current_char, current_index)
     
     # ポート設定の取得
     port = extract_port_config(config)
@@ -137,6 +137,7 @@ def create_app(config_dir=None):
         api_key=llm_api_key,
         model=llm_model,
         system_prompt=system_prompt,
+        base_url=base_url,
         context_provider=get_shared_context_id,
         temperature=1.0,
     )

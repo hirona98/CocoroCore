@@ -91,7 +91,7 @@ def get_character_config(config: Dict) -> Dict:
     return character_list[current_index]
 
 
-def extract_llm_config(config: Dict, current_char: Dict, current_index: int) -> Tuple[str, str, str, str]:
+def extract_llm_config(config: Dict, current_char: Dict, current_index: int) -> Tuple[str, str, str, str, str]:
     """LLM設定を抽出
     
     Args:
@@ -100,7 +100,7 @@ def extract_llm_config(config: Dict, current_char: Dict, current_index: int) -> 
         current_index: 現在のキャラクターインデックス
         
     Returns:
-        (llm_api_key, llm_model, system_prompt, user_id)
+        (llm_api_key, llm_model, system_prompt, base_url, user_id)
     """
     import os
     from time_utils import create_time_guidelines
@@ -111,6 +111,9 @@ def extract_llm_config(config: Dict, current_char: Dict, current_index: int) -> 
     llm_model = current_char.get("llmModel")
     system_prompt = current_char.get("systemPrompt", "あなたは親切なアシスタントです。")
     
+    # ベースURL設定を取得（ローカルLLM対応）
+    base_url = current_char.get("localLLMBaseUrl", "")
+    
     # 時間感覚ガイドラインをシステムプロンプトに追加
     system_prompt += create_time_guidelines()
     
@@ -118,7 +121,10 @@ def extract_llm_config(config: Dict, current_char: Dict, current_index: int) -> 
     user_id = current_char.get("userId", "default_user")
     logger.info(f"設定から読み込んだユーザーID: {user_id}")
     
-    return llm_api_key, llm_model, system_prompt, user_id
+    if base_url:
+        logger.info(f"ローカルLLM BaseURL設定: {base_url}")
+    
+    return llm_api_key, llm_model, system_prompt, base_url, user_id
 
 
 def extract_port_config(config: Dict) -> int:

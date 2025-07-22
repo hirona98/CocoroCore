@@ -106,6 +106,7 @@ def create_llm_service(
     api_key: str,
     model: str,
     system_prompt: str,
+    base_url: Optional[str] = None,
     context_provider: Optional[Callable[[], str]] = None,
     temperature: float = 1.0,
 ) -> LLMWithSharedContext:
@@ -115,6 +116,7 @@ def create_llm_service(
         api_key: APIキー
         model: LLMモデル名
         system_prompt: システムプロンプト
+        base_url: ローカルLLMのベースURL（Noneの場合はデフォルト使用）
         context_provider: 共有コンテキストIDを提供する関数
         temperature: 温度設定
 
@@ -129,14 +131,22 @@ def create_llm_service(
     context_db_path = os.path.join(config_dir, "context.db")
     context_manager = SQLiteContextManager(db_path=context_db_path)
     
+    # ベースLLMサービス初期化用パラメーター
+    llm_params = {
+        "api_key": api_key,
+        "model": model,
+        "temperature": temperature,
+        "system_prompt": system_prompt,
+        "context_manager": context_manager,
+    }
+    
+    # base_urlが指定されている場合は追加
+    if base_url and base_url.strip():
+        llm_params["base_url"] = base_url.strip()
+        logger.info(f"ローカルLLM設定: model={model}, base_url={base_url}")
+    
     # ベースLLMサービスを初期化
-    base_llm = LiteLLMService(
-        api_key=api_key,
-        model=model,
-        temperature=temperature,
-        system_prompt=system_prompt,
-        context_manager=context_manager,
-    )
+    base_llm = LiteLLMService(**llm_params)
 
     # ラッパーを適用
     return LLMWithSharedContext(base_llm, context_provider)
