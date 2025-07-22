@@ -2,11 +2,20 @@
 
 import asyncio
 import logging
-from typing import Dict, List, Optional
+from enum import Enum
+from typing import Any, Dict, List, Optional
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+
+class MessageType(Enum):
+    """メッセージタイプの定義"""
+
+    USER_CHAT = "user_chat"
+    NOTIFICATION = "notification"
+    DESKTOP_MONITORING = "desktop_monitoring"
 
 
 class ChatMemoryClient:
@@ -21,96 +30,207 @@ class ChatMemoryClient:
         self._queue_lock = asyncio.Lock()
 
     async def enqueue_messages(self, request, response):
-        """メッセージをキューに追加"""
-        # contentがnullまたは空の場合はスキップ
-        if not request.text or not response.text:
-            logger.debug(f"空のメッセージをスキップ: user_content={request.text}, assistant_content={response.text}")
+        """メッセージタイプに応じた適切な保存処理"""
+        # response.textが空の場合はスキップ
+        if not response.text:
+            logger.debug(f"空のレスポンスをスキップ: assistant_content={response.text}")
             return
 
         async with self._queue_lock:
-            # ユーザーメッセージのmetadata（通知情報を含む）
-            user_metadata = {"session_id": request.session_id, "user_id": request.user_id}
-            if hasattr(request, "metadata") and request.metadata:
-                user_metadata.update(request.metadata)
+            # メッセージタイプを判定
+            message_type = self._determine_message_type(request)
 
-            # 通知メッセージの処理
-            if user_metadata.get("is_notification"):
-                # 通知メッセージはsystemロールで保存
-                notification_from = user_metadata.get("notification_from", "不明なアプリ")
-                notification_message = user_metadata.get("notification_message", "")
-                self._message_queue.append(
-                    {
-                        "role": "system",
-                        "content": f"[通知: {notification_from}] {notification_message}",
-                        "metadata": user_metadata,
-                    }
-                )
-                logger.info(f"通知メッセージをシステムメッセージとして履歴に追加: from={notification_from}")
-                # userロールでの保存はスキップ
+            # タイプ別処理
+            if message_type == MessageType.NOTIFICATION:
+                await self._handle_notification_message(request, response)
+            elif message_type == MessageType.DESKTOP_MONITORING:
+                await self._handle_desktop_monitoring_message(request, response)
+            else:  # MessageType.USER_CHAT
+                await self._handle_user_chat_message(request, response)
 
-            elif user_metadata.get("image_description"):
-                # 画像説明がある場合は、システムメッセージとして先に追加
-                # メタデータから画像情報を構築
-                image_info = user_metadata["image_description"]
-                category = user_metadata.get("image_category", "")
-                mood = user_metadata.get("image_mood", "")
-                time = user_metadata.get("image_time", "")
+    def _determine_message_type(self, request: Any) -> MessageType:
+        """リクエストからメッセージタイプを判定"""
+        request_text = request.text or ""
 
-                # 分類情報があれば追加
-                classification = ""
-                if category or mood or time:
-                    classification = f" (分類: {category}/{mood}/{time})"
+        # 優先順位1: 通知メッセージ
+        if "<cocoro-notification>" in request_text:
+            return MessageType.NOTIFICATION
 
-                self._message_queue.append(
-                    {
-                        "role": "system",
-                        "content": f"[画像が共有されました: {image_info}]{classification}",
-                        "metadata": {
-                            "session_id": request.session_id,
-                            "user_id": request.user_id,
-                            "type": "image_description",
-                            "image_category": category,
-                            "image_mood": mood,
-                            "image_time": time,
-                        },
-                    }
-                )
-                logger.info(f"画像説明をシステムメッセージとして履歴に追加: {image_info[:30]}... [{category}/{mood}/{time}]")
+        # 優先順位2: デスクトップモニタリング
+        if "<cocoro-desktop-monitoring>" in request_text:
+            return MessageType.DESKTOP_MONITORING
 
-                # デスクトップモニタリングの場合、userメッセージは保存しない
-                if "<cocoro-desktop-monitoring>" in request.text:
-                    logger.info("デスクトップモニタリング画像のため、userメッセージの保存をスキップ")
-                    # assistantの応答のみ保存に進む
-                else:
-                    # 通常の画像共有の場合、画像情報を除去してuserメッセージを保存
-                    cleaned_text = self._remove_image_prefix(request.text)
-                    if cleaned_text:  # テキストがある場合のみ保存
-                        self._message_queue.append(
-                            {
-                                "role": "user",
-                                "content": cleaned_text,
-                                "metadata": user_metadata,
-                            }
-                        )
+        # 優先順位3: 通常のユーザーチャット
+        return MessageType.USER_CHAT
 
-            else:
-                # 通常のメッセージ
+    async def _handle_notification_message(self, request: Any, response: Any) -> None:
+        """通知メッセージの処理"""
+        user_metadata = self._build_user_metadata(request)
+
+        # 通知タグから情報を直接抽出
+        notification_info = self._extract_notification_info(request.text or "")
+        notification_from = notification_info.get("from", "不明なアプリ")
+        notification_message = notification_info.get("message", "")
+
+        # 画像付き通知の場合
+        if user_metadata.get("image_description"):
+            image_info = user_metadata["image_description"]
+            classification = self._build_classification(user_metadata)
+
+            content = f"[画像付き通知: {notification_from}] {notification_message}\n[画像内容: {image_info}]{classification}"
+            logger.info(f"画像付き通知メッセージをシステムメッセージとして履歴に追加: from={notification_from}")
+        else:
+            content = f"[通知: {notification_from}] {notification_message}"
+            logger.info(f"通知メッセージをシステムメッセージとして履歴に追加: from={notification_from}")
+
+        # systemロールで保存
+        self._message_queue.append(
+            {
+                "role": "system",
+                "content": content,
+                "metadata": user_metadata,
+            }
+        )
+
+        # アシスタントの応答を追加
+        self._add_assistant_response(request, response)
+
+    async def _handle_desktop_monitoring_message(self, request: Any, response: Any) -> None:
+        """デスクトップモニタリングメッセージの処理"""
+        user_metadata = self._build_user_metadata(request)
+
+        # 画像説明が必須
+        if not user_metadata.get("image_description"):
+            logger.warning("デスクトップモニタリングに画像説明がありません")
+            return
+
+        image_info = user_metadata["image_description"]
+        classification = self._build_classification(user_metadata)
+
+        # systemロールで画像説明のみ保存
+        self._message_queue.append(
+            {
+                "role": "system",
+                "content": f"[画像が共有されました: {image_info}]{classification}",
+                "metadata": {
+                    "session_id": request.session_id,
+                    "user_id": request.user_id,
+                    "type": "image_description",
+                    "image_category": user_metadata.get("image_category", ""),
+                    "image_mood": user_metadata.get("image_mood", ""),
+                    "image_time": user_metadata.get("image_time", ""),
+                },
+            }
+        )
+
+        logger.info("デスクトップモニタリング画像説明をシステムメッセージとして履歴に追加")
+
+        # userメッセージは保存しない
+        # アシスタントの応答を追加
+        self._add_assistant_response(request, response)
+
+    async def _handle_user_chat_message(self, request: Any, response: Any) -> None:
+        """通常のユーザーチャットメッセージの処理"""
+        # request.textが空の場合はスキップ
+        if not request.text:
+            logger.debug("空のユーザーメッセージをスキップ")
+            return
+
+        user_metadata = self._build_user_metadata(request)
+
+        # 画像がある場合
+        if user_metadata.get("image_description"):
+            # 画像説明をsystemロールで保存
+            image_info = user_metadata["image_description"]
+            classification = self._build_classification(user_metadata)
+
+            self._message_queue.append(
+                {
+                    "role": "system",
+                    "content": f"[画像が共有されました: {image_info}]{classification}",
+                    "metadata": {
+                        "session_id": request.session_id,
+                        "user_id": request.user_id,
+                        "type": "image_description",
+                        "image_category": user_metadata.get("image_category", ""),
+                        "image_mood": user_metadata.get("image_mood", ""),
+                        "image_time": user_metadata.get("image_time", ""),
+                    },
+                }
+            )
+
+            logger.info(f"画像説明をシステムメッセージとして履歴に追加: {image_info[:30]}...")
+
+            # 画像プレフィックスを除去してuserメッセージを保存
+            cleaned_text = self._remove_image_prefix(request.text)
+            if cleaned_text:
                 self._message_queue.append(
                     {
                         "role": "user",
-                        "content": request.text,
+                        "content": cleaned_text,
                         "metadata": user_metadata,
                     }
                 )
-
-            # アシスタントの応答は通知情報を含まない
+        else:
+            # 画像がない通常のメッセージ
             self._message_queue.append(
                 {
-                    "role": "assistant",
-                    "content": response.text,
-                    "metadata": {"session_id": request.session_id, "user_id": request.user_id},
+                    "role": "user",
+                    "content": request.text,
+                    "metadata": user_metadata,
                 }
             )
+
+        # アシスタントの応答を追加
+        self._add_assistant_response(request, response)
+
+    def _build_user_metadata(self, request: Any) -> Dict[str, Any]:
+        """ユーザーメタデータを構築"""
+        user_metadata = {"session_id": request.session_id, "user_id": request.user_id}
+        if hasattr(request, "metadata") and request.metadata:
+            user_metadata.update(request.metadata)
+        return user_metadata
+
+    def _extract_notification_info(self, text: str) -> Dict[str, str]:
+        """通知タグからJSON形式の情報を抽出"""
+        import re
+        import json
+
+        if not text or "<cocoro-notification>" not in text:
+            return {}
+
+        notification_pattern = r"<cocoro-notification>\s*(.*?)\s*</cocoro-notification>"
+        match = re.search(notification_pattern, text, re.DOTALL)
+
+        if match:
+            content = match.group(1).strip()
+            try:
+                return json.loads(content)
+            except Exception as e:
+                logger.error(f"通知JSON解析エラー: {e}")
+                return {}
+
+        return {}
+
+    def _build_classification(self, metadata: Dict[str, Any]) -> str:
+        """分類情報を構築"""
+        category = metadata.get("image_category", "")
+        mood = metadata.get("image_mood", "")
+        time = metadata.get("image_time", "")
+
+        if category or mood or time:
+            return f" (分類: {category}/{mood}/{time})"
+        return ""
+
+    def _add_assistant_response(self, request: Any, response: Any) -> None:
+        """アシスタントの応答を追加"""
+        self._message_queue.append(
+            {
+                "role": "assistant",
+                "content": response.text,
+                "metadata": {"session_id": request.session_id, "user_id": request.user_id},
+            }
+        )
 
     def _remove_image_prefix(self, text: str) -> str:
         """画像プレフィックスを除去"""
