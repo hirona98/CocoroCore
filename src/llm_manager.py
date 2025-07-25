@@ -138,6 +138,7 @@ def create_llm_service(
         "temperature": temperature,
         "system_prompt": system_prompt,
         "context_manager": context_manager,
+        "debug": False,  # ツール呼び出し詳細のログ出力を無効化
     }
     
     # base_urlが指定されている場合は追加

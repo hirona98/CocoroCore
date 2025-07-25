@@ -108,7 +108,7 @@ class CocoroDockClient:
             logger.info(f"制御コマンド送信成功: {command}")
             return True
         except Exception as e:
-            logger.error(f"制御コマンドエラー: {e}")
+            logger.error(f"制御コマンドエラー: {command}, {e}")
             return False
 
     async def send_status_update(self, message: str, status_type: Optional[str] = None) -> bool:
@@ -232,7 +232,7 @@ class CocoroShellClient:
             logger.info(f"制御コマンド送信成功: {command}")
             return True
         except Exception as e:
-            logger.error(f"制御コマンドエラー: {e}")
+            logger.error(f"制御コマンドエラー: {command}, {e}")
             return False
 
     async def close(self):

@@ -1,7 +1,9 @@
 """レスポンス処理関連のモジュール"""
 
 import asyncio
+import json
 import logging
+import re
 from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,40 @@ class ResponseProcessor:
         self.cocoro_shell_client = cocoro_shell_client
         self.current_char = current_char or {}
         self.vad_instance = vad_instance
+
+    def _normalize_response_text(self, text: str) -> str:
+        """JSON形式のレスポンスをプレーンテキストに変換
+        
+        Args:
+            text: 原文テキスト
+            
+        Returns:
+            正規化されたテキスト
+        """
+        if not text or not text.strip():
+            return text
+            
+        # JSON形式かどうかを検出
+        text_stripped = text.strip()
+        if text_stripped.startswith('{') and text_stripped.endswith('}'):
+            try:
+                # JSONとしてパース
+                json_data = json.loads(text_stripped)
+                
+                # messageフィールドがあれば抽出
+                if isinstance(json_data, dict) and "message" in json_data:
+                    normalized_text = json_data["message"]
+                    logger.debug(f"JSON応答を正規化: {text_stripped} -> {normalized_text}")
+                    return normalized_text
+                else:
+                    # messageフィールドがない場合（空のJSONなど）は元のテキストを返す
+                    logger.warning(f"JSON応答にmessageフィールドがありません: {text_stripped}")
+                    return text
+            except json.JSONDecodeError:
+                # JSONパースに失敗した場合は元のテキストを返す
+                pass
+        
+        return text
 
     async def process_response_complete(
         self, 
@@ -91,6 +127,8 @@ class ResponseProcessor:
     async def _send_to_external_services(self, request: Any, response: Any) -> None:
         """外部サービスへの送信を非同期で実行"""
         try:
+            # レスポンステキストを正規化（JSON形式の場合はプレーンテキストに変換）
+            normalized_text = self._normalize_response_text(response.text) if response.text else None
             # ChatMemory処理（メモリー機能が有効な場合）
             if self.memory_client:
                 await self.memory_client.enqueue_messages(request, response)
@@ -107,15 +145,15 @@ class ResponseProcessor:
             tasks = []
 
             # CocoroDock への送信（AI応答のみ）
-            if self.cocoro_dock_client and response.text:
+            if self.cocoro_dock_client and normalized_text:
                 tasks.append(
                     self.cocoro_dock_client.send_chat_message(
-                        role="assistant", content=response.text
+                        role="assistant", content=normalized_text
                     )
                 )
 
             # CocoroShell への送信
-            if self.cocoro_shell_client and response.text:
+            if self.cocoro_shell_client and normalized_text:
                 # 音声パラメータを取得
                 voice_params = {
                     "speaker_id": self.current_char.get("voiceSpeakerId", 1),
@@ -129,7 +167,7 @@ class ResponseProcessor:
 
                 tasks.append(
                     self.cocoro_shell_client.send_chat_for_speech(
-                        content=response.text,
+                        content=normalized_text,
                         voice_params=voice_params,
                         character_name=character_name,
                     )
