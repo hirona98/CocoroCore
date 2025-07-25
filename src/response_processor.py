@@ -63,14 +63,28 @@ class ResponseProcessor:
                 # JSONとしてパース
                 json_data = json.loads(text_stripped)
                 
-                # messageフィールドがあれば抽出
-                if isinstance(json_data, dict) and "message" in json_data:
-                    normalized_text = json_data["message"]
-                    logger.debug(f"JSON応答を正規化: {text_stripped} -> {normalized_text}")
-                    return normalized_text
-                else:
-                    # messageフィールドがない場合（空のJSONなど）は元のテキストを返す
-                    logger.warning(f"JSON応答にmessageフィールドがありません: {text_stripped}")
+                if isinstance(json_data, dict):
+                    # 通常のmessageフィールド
+                    if "message" in json_data:
+                        normalized_text = json_data["message"]
+                        logger.debug(f"JSON応答を正規化: {text_stripped} -> {normalized_text}")
+                        return normalized_text
+                    
+                    # 異常なJSONレスポンス（thought, call, responseフィールド）を検出
+                    if "thought" in json_data and "call" in json_data and "response" in json_data:
+                        logger.warning(f"異常なJSONレスポンスを検出（thought/call/responseフィールド）: {text_stripped}")
+                        # responseフィールドの内容を優先的に抽出
+                        if json_data.get("response"):
+                            return str(json_data["response"])
+                        # responseが空の場合はthoughtフィールドを使用
+                        elif json_data.get("thought"):
+                            return str(json_data["thought"])
+                        else:
+                            # どちらも空の場合は元のテキストを返す
+                            return text
+                    
+                    # その他のフィールドがない場合
+                    logger.warning(f"JSON応答に適切なフィールドがありません: {text_stripped}")
                     return text
             except json.JSONDecodeError:
                 # JSONパースに失敗した場合は元のテキストを返す
