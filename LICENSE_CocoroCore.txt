@@ -1,0 +1,231 @@
+================================================================================
+CocoroCore License
+================================================================================
+
+MIT License
+
+Copyright (c) CocoroCore Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+Python and Python Standard Library
+================================================================================
+
+Python Software Foundation License Version 2
+Copyright (c) 2001-2025 Python Software Foundation; All Rights Reserved
+
+https://docs.python.org/3/license.html
+
+================================================================================
+Third Party Python Packages
+================================================================================
+
+The following Python packages are included in this distribution:
+
+--------------------------------------------------------------------------------
+MIT License
+
+The following packages are licensed under the MIT License:
+
+- fastapi
+- pydantic
+- litellm (Copyright (c) 2023 Berri AI)
+- PyAudio
+- PyYAML
+- aiavatar
+- jiter
+- python-dotenv
+- regex
+- tiktoken
+- typing-inspection
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+--------------------------------------------------------------------------------
+BSD 3-Clause License
+
+The following packages are licensed under the BSD 3-Clause License:
+
+- uvicorn
+- numpy (Copyright (c) 2005-2024, NumPy Developers)
+- click
+- colorama
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+3. Neither the name of the copyright holder nor the names of its
+   contributors may be used to endorse or promote products derived from
+   this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+--------------------------------------------------------------------------------
+BSD License
+
+The following packages are licensed under the BSD License:
+
+- httpx
+- Jinja2
+- MarkupSafe
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+--------------------------------------------------------------------------------
+Apache License 2.0
+
+The following packages are licensed under the Apache License, Version 2.0:
+
+- aiofiles
+- openai
+- requests
+- tokenizers
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+--------------------------------------------------------------------------------
+Other Licenses
+
+The following packages have their own specific licenses:
+
+- aiohttp: Apache 2.0
+- aiohappyeyeballs: BSD 3-Clause
+- aiosignal: Apache 2.0
+- annotated-types: MIT
+- anyio: MIT
+- async-timeout: Apache 2.0
+- attrs: MIT
+- certifi: MPL-2.0
+- charset-normalizer: MIT
+- distro: Apache 2.0
+- exceptiongroup: MIT
+- filelock: The Unlicense
+- frozenlist: Apache 2.0
+- fsspec: BSD 3-Clause
+- h11: MIT
+- httpcore: BSD 3-Clause
+- huggingface-hub: Apache 2.0
+- idna: BSD 3-Clause
+- importlib_metadata: Apache 2.0
+- jsonschema: MIT
+- jsonschema-specifications: MIT
+- multidict: Apache 2.0
+- packaging: Apache 2.0 or BSD 2-Clause
+- propcache: Apache 2.0
+- pydantic_core: MIT
+- referencing: MIT
+- rpds-py: MIT
+- sniffio: MIT or Apache 2.0
+- sse-starlette: BSD 3-Clause
+- starlette: BSD 3-Clause
+- tqdm: MIT or MPLv2.0
+- typing_extensions: PSF
+- urllib3: MIT
+- yarl: Apache 2.0
+- zipp: MIT
+
+================================================================================
+PyInstaller
+================================================================================
+
+PyInstaller is licensed under the GNU General Public License version 2 (GPL-2.0)
+with a special exception which allows to use PyInstaller to build and distribute
+non-free programs (including commercial applications).
+
+The full text of the exception is as follows:
+
+"In addition to the permissions in the GNU General Public License, the
+authors give you unlimited permission to link or embed compiled bootloader
+and related files into combinations with other programs, and to distribute
+those combinations without any restriction coming from the use of those
+files. (The General Public License restrictions do apply in other respects;
+for example, they cover modification of the files, and distribution when
+not linked into a combined executable.)"
+
+This means that programs packaged with PyInstaller can be distributed under
+any license the developer chooses, without being affected by PyInstaller's GPL license.
+
+For more information: https://github.com/pyinstaller/pyinstaller/blob/develop/COPYING.txt
+
+================================================================================
+
+For the most up-to-date license information for each package, please refer to
+the respective project's repository or PyPI page.
